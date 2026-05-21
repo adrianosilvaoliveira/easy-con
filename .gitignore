@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+backend/public/
+frontend/dist/
+.env
+*.log
+logs/
+.DS_Store
+coverage/
+.vscode/
+.idea/
+*.pem

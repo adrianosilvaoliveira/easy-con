@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply overflow-x-hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply overflow-x-hidden bg-surface-muted text-slate-800 font-sans antialiased;
+  }
+  #root {
+    @apply min-h-screen w-full max-w-[100vw] overflow-x-hidden;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-surface-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50;
+  }
+  .input-field {
+    @apply w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm shadow-sm transition placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+  }
+  .card {
+    @apply rounded-xl border border-surface-border bg-white p-4 shadow-card sm:p-6;
+  }
+  .table-container {
+    @apply overflow-x-auto rounded-xl border border-surface-border bg-white shadow-card;
+  }
+  .page-content {
+    @apply w-full min-w-0 max-w-full space-y-3 sm:space-y-4;
+  }
+  .responsive-grid-kpi {
+    @apply grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4 lg:gap-5;
+  }
+  .responsive-grid-kpi-2 {
+    @apply grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5;
+  }
+}
