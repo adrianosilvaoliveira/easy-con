@@ -1,10 +1,13 @@
 import { createApp } from './createApp';
+import { attachFrontend } from './setupFrontend';
 import { env } from './configs/env';
 import { logger } from './shared/logger';
 import { startExpirationCron } from './jobs/expirationCron';
 import { BatchService } from './modules/batches/BatchService';
 
-void createApp().then((app) => {
+void (async () => {
+  const app = createApp();
+  await attachFrontend(app);
   const PORT = env.PORT;
 
   app.listen(PORT, async () => {
@@ -20,4 +23,4 @@ void createApp().then((app) => {
       logger.warn('Initial expiration sync skipped', e);
     }
   });
-});
+})();

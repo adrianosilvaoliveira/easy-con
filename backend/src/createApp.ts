@@ -12,11 +12,9 @@ import { swaggerSpec } from './configs/swagger';
 import { apiRoutes } from './routes';
 import { errorHandler } from './middlewares/errorHandler';
 import { logger } from './shared/logger';
-import { attachFrontend } from './setupFrontend';
-
 const isVercel = !!process.env.VERCEL;
 
-export async function createApp(): Promise<Express> {
+export function createApp(): Express {
   if (!isVercel) {
     const logsDir = path.join(process.cwd(), 'logs');
     if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
@@ -53,10 +51,6 @@ export async function createApp(): Promise<Express> {
 
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   app.use('/api', apiRoutes);
-
-  if (!isVercel) {
-    await attachFrontend(app);
-  }
 
   app.use(errorHandler);
 
