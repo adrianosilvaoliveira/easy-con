@@ -34,12 +34,22 @@ export function LoginPage() {
       navigate('/');
     },
     onError: (err: unknown) => {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 404 || status === 502) {
-        toast.error('API indisponível. Verifique o deploy do backend na Vercel.');
+      const ax = err as { code?: string; response?: { status?: number; data?: { message?: string } } };
+      if (ax.code === 'ECONNABORTED') {
+        toast.error('Servidor demorou para responder. Tente de novo em instantes.');
         return;
       }
-      toast.error('Credenciais inválidas');
+      const status = ax.response?.status;
+      const msg = ax.response?.data?.message;
+      if (status === 503) {
+        toast.error(msg ?? 'Banco sem tabelas. Rode o seed no Postgres (ver README).');
+        return;
+      }
+      if (status === 404 || status === 502) {
+        toast.error('API indisponível. Use https://constock-teal.vercel.app');
+        return;
+      }
+      toast.error(msg ?? 'Credenciais inválidas');
     },
   });
 

@@ -22,6 +22,10 @@ export function createApp(): Express {
 
   const app = express();
 
+  if (isVercel) {
+    app.set('trust proxy', 1);
+  }
+
   app.use(
     env.NODE_ENV === 'production'
       ? helmet()
@@ -46,6 +50,7 @@ export function createApp(): Express {
       windowMs: env.RATE_LIMIT_WINDOW_MS,
       max: env.RATE_LIMIT_MAX,
       message: { success: false, message: 'Muitas requisições. Tente novamente mais tarde.' },
+      validate: isVercel ? { xForwardedForHeader: false } : undefined,
     })
   );
 

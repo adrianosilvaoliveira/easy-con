@@ -8,6 +8,7 @@ import {
   resetPasswordSchema,
 } from '../modules/auth/auth.dto';
 import { authenticate } from '../middlewares/auth';
+import { asyncHandler } from '../middlewares/asyncHandler';
 
 const authRoutes = Router();
 
@@ -18,11 +19,11 @@ const authRoutes = Router();
  *     tags: [Auth]
  *     summary: Login
  */
-authRoutes.post('/login', validate(loginSchema), AuthController.login);
-authRoutes.post('/refresh', validate(refreshTokenSchema), AuthController.refresh);
-authRoutes.post('/logout', validate(refreshTokenSchema), AuthController.logout);
-authRoutes.post('/forgot-password', validate(forgotPasswordSchema), AuthController.forgotPassword);
-authRoutes.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
-authRoutes.get('/me', authenticate, AuthController.me);
+authRoutes.post('/login', validate(loginSchema), asyncHandler(AuthController.login));
+authRoutes.post('/refresh', validate(refreshTokenSchema), asyncHandler(AuthController.refresh));
+authRoutes.post('/logout', validate(refreshTokenSchema), asyncHandler(AuthController.logout));
+authRoutes.post('/forgot-password', validate(forgotPasswordSchema), asyncHandler(AuthController.forgotPassword));
+authRoutes.post('/reset-password', validate(resetPasswordSchema), asyncHandler(AuthController.resetPassword));
+authRoutes.get('/me', authenticate, asyncHandler(AuthController.me));
 
 export { authRoutes };

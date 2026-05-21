@@ -22,6 +22,17 @@ export function errorHandler(
     return;
   }
 
+  const prismaCode = (err as { code?: string }).code;
+  if (prismaCode === 'P2021' || prismaCode === 'P1001') {
+    res.status(503).json({
+      success: false,
+      code: 'DATABASE_NOT_READY',
+      message:
+        'Banco de dados sem tabelas. Rode: cd backend && .\\scripts\\seed-vercel.ps1',
+    });
+    return;
+  }
+
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,

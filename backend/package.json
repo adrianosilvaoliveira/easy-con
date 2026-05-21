@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc",
-    "vercel-build": "prisma generate && prisma migrate deploy && tsc",
+    "vercel-build": "node scripts/prepare-env.js && prisma generate && prisma migrate deploy && tsc",
     "build:full": "npm run build:server --prefix ../frontend && tsc",
     "start": "node dist/server.js",
     "prestart": "node -e \"const fs=require('fs');const p='public/index.html';if(!fs.existsSync(p)){console.error('Build do frontend ausente. Rode: npm run build:server --prefix ../frontend');process.exit(1)}\"",
