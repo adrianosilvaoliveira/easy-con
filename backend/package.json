@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "vercel-build": "prisma generate && prisma migrate deploy && tsc",
     "build:full": "npm run build:server --prefix ../frontend && tsc",
     "start": "node dist/server.js",
