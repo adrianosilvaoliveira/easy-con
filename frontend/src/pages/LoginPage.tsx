@@ -33,7 +33,14 @@ export function LoginPage() {
       toast.success('Bem-vindo!');
       navigate('/');
     },
-    onError: () => toast.error('Credenciais inválidas'),
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404 || status === 502) {
+        toast.error('API indisponível. Verifique o deploy do backend na Vercel.');
+        return;
+      }
+      toast.error('Credenciais inválidas');
+    },
   });
 
   return (
