@@ -166,9 +166,45 @@ O repositório está preparado para **dois serviços** no mesmo projeto (recurso
 | Frontend (Vite) | `frontend/` | `/` |
 | Backend (Express serverless) | `backend/` | `/_/backend` |
 
-### 1. Banco de dados
+### 1. Banco de dados — Vercel Postgres
 
-Use um PostgreSQL gerenciado (Neon, Supabase, Vercel Postgres, etc.) e copie a connection string.
+O backend usa **PostgreSQL** via Prisma. Em produção, use **Vercel Postgres** (Storage no painel do projeto).
+
+#### Criar e conectar
+
+1. Vercel → projeto **constock** (ou o seu) → aba **Storage**.
+2. **Create Database** → **Postgres** → escolha região e crie.
+3. **Connect to Project** → marque o projeto e o ambiente **Production** e **Preview**.
+4. Confirme que as variáveis aparecem no serviço **backend** (monorepo):
+   - `POSTGRES_PRISMA_URL` — conexão com pool (runtime)
+   - `POSTGRES_URL_NON_POOLING` — conexão direta (migrations)
+
+O código mapeia automaticamente para o Prisma:
+
+| Variável Vercel | Uso no Prisma |
+|-----------------|---------------|
+| `POSTGRES_PRISMA_URL` | `DATABASE_URL` (queries) |
+| `POSTGRES_URL_NON_POOLING` | `DIRECT_URL` (migrate deploy) |
+
+Não é obrigatório copiar manualmente, desde que as variáveis `POSTGRES_*` estejam no serviço **backend**.
+
+5. **Redeploy** do backend — o build executa `prisma migrate deploy` e cria as tabelas.
+6. **Seed** (usuários iniciais), uma vez:
+   ```bash
+   cd backend
+   vercel env pull .env   # traz POSTGRES_* do projeto
+   npx prisma db seed
+   ```
+
+#### Desenvolvimento local
+
+```bash
+docker compose up -d postgres
+```
+
+Copie `backend/.env.example` → `backend/.env` (`DATABASE_URL` e `DIRECT_URL` iguais no Docker).
+
+**Sincronizar com o banco da Vercel:** `vercel env pull backend/.env` na pasta do projeto.
 
 ### 2. Importar no painel Vercel
 
@@ -180,7 +216,8 @@ Use um PostgreSQL gerenciado (Neon, Supabase, Vercel Postgres, etc.) e copie a c
 
 | Variável | Obrigatória | Descrição |
 |----------|-------------|-----------|
-| `DATABASE_URL` | Sim | URL PostgreSQL |
+| `DATABASE_URL` / `POSTGRES_PRISMA_URL` | Sim | Vercel Postgres preenche `POSTGRES_*` automaticamente |
+| `DIRECT_URL` / `POSTGRES_URL_NON_POOLING` | Sim (migrations) | Conexão direta para `prisma migrate deploy` |
 | `JWT_SECRET` | Sim | Mín. 32 caracteres |
 | `JWT_REFRESH_SECRET` | Sim | Mín. 32 caracteres |
 | `NODE_ENV` | Sim | `production` |
