@@ -10,6 +10,7 @@ import { reportRoutes } from './report.routes';
 import { auditRoutes } from './audit.routes';
 import { supplierRoutes } from './supplier.routes';
 import { batchesRoutes } from './batches.routes';
+import { organizationRoutes } from './organization.routes';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use('/reports', reportRoutes);
 router.use('/audit', auditRoutes);
 router.use('/suppliers', supplierRoutes);
 router.use('/batches', batchesRoutes);
+router.use('/organization', organizationRoutes);
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

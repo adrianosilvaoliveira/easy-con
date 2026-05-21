@@ -43,7 +43,7 @@ export class ReportService {
       },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Relatório de Movimentações',
       subtitle: `Período: ${filters.startDate || 'Início'} a ${filters.endDate || 'Atual'}`,
       filename: 'movimentacoes',
@@ -82,7 +82,7 @@ export class ReportService {
       },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Relatório de Entradas',
       filename: 'entradas',
       userName,
@@ -115,7 +115,7 @@ export class ReportService {
       include: { product: true, originLocation: true, user: { select: { name: true } } },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Relatório de Saídas',
       filename: 'saidas',
       userName,
@@ -179,7 +179,7 @@ export class ReportService {
       include: batchReportInclude,
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: `Produtos Vencendo (${days} dias)`,
       subtitle: buildReportSubtitle(reportFilters),
       filename: 'produtos-vencendo',
@@ -217,7 +217,7 @@ export class ReportService {
       0
     );
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Produtos Vencidos',
       subtitle: `${buildReportSubtitle(reportFilters)} · Perda estimada: R$ ${totalLoss.toFixed(2)}`,
       filename: 'produtos-vencidos',
@@ -242,7 +242,7 @@ export class ReportService {
       include: batchReportInclude,
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Controle de Lotes',
       subtitle: buildReportSubtitle(filters),
       filename: 'produtos-por-lote',
@@ -269,7 +269,7 @@ export class ReportService {
       include: batchReportInclude,
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Vencimentos por Localização',
       subtitle: buildReportSubtitle(filters),
       filename: 'vencimentos-por-local',
@@ -310,7 +310,7 @@ export class ReportService {
       },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Produtos Descartados por Vencimento',
       subtitle: buildReportSubtitle(filters),
       filename: 'produtos-descartados',
@@ -383,7 +383,7 @@ export class ReportService {
       })),
     ];
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Histórico de Perdas por Vencimento',
       subtitle: `${buildReportSubtitle(filters)} · Estoque vencido: R$ ${batchLoss.toFixed(2)} · Baixas: R$ ${movementLoss.toFixed(2)}`,
       filename: 'historico-perdas',
@@ -413,7 +413,7 @@ export class ReportService {
       include: { user: { select: { name: true } } },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Auditoria de Vencimentos',
       subtitle: buildReportSubtitle(filters),
       filename: 'auditoria-vencimentos',
@@ -445,7 +445,7 @@ export class ReportService {
       (p) => p.stockItems.reduce((s, i) => s + i.quantity, 0) < p.minQuantity
     );
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Produtos Abaixo do Estoque Mínimo',
       filename: 'estoque-minimo',
       userName,
@@ -484,7 +484,7 @@ export class ReportService {
       include: { user: { select: { name: true } } },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: 'Relatório de Auditoria',
       filename: 'auditoria',
       userName,
@@ -521,7 +521,7 @@ export class ReportService {
       where: { id: { in: exits.map((e) => e.productId) } },
     });
 
-    PdfProvider.generate(res, {
+    await PdfProvider.generate(res, {
       title: `Consumo Mensal - ${start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
       filename: 'consumo-mensal',
       userName,

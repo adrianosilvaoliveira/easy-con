@@ -1,5 +1,11 @@
 import { AppRoutes } from '@/routes';
+import { ThemeInit } from '@/components/ThemeInit';
 
 export default function App() {
-  return <AppRoutes />;
+  return (
+    <>
+      <ThemeInit />
+      <AppRoutes />
+    </>
+  );
 }

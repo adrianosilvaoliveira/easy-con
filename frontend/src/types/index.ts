@@ -1,3 +1,12 @@
+export interface OrganizationSettings {
+  id: string;
+  name: string;
+  cnpj?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}
+
 export interface User {
   id: string;
   name: string;

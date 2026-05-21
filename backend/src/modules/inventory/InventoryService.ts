@@ -46,7 +46,7 @@ export class InventoryService {
     if (active) throw new ValidationError('Já existe inventário em andamento neste local');
 
     const stockItems = await prisma.stockItem.findMany({
-      where: { locationId: data.locationId, quantity: { gt: 0 } },
+      where: { locationId: data.locationId },
     });
 
     return prisma.inventory.create({

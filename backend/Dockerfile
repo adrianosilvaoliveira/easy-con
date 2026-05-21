@@ -1,10 +1,10 @@
 FROM node:20-alpine AS frontend-builder
 
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
+WORKDIR /app
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+COPY frontend ./frontend/
+RUN mkdir -p backend/public && cd frontend && npm run build:server
 
 FROM node:20-alpine AS backend-builder
 

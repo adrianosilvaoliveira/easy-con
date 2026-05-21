@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -372,6 +373,21 @@ model InventoryItem {
   createdAt       DateTime  @default(now())
 
   @@map("inventory_items")
+}
+
+// ==================== ORGANIZATION ====================
+
+model OrganizationSettings {
+  id        String   @id @default("default")
+  name      String
+  cnpj      String?
+  address   String?
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("organization_settings")
 }
 
 // ==================== AUDIT ====================

@@ -8,7 +8,7 @@ Sistema enterprise completo para controle de estoque em hospitais oftalmológico
 |--------|-------------|
 | Frontend | React, TypeScript, Vite, TailwindCSS, TanStack Query, Zustand, React Hook Form, Zod |
 | Backend | Node.js, Express, TypeScript, Prisma, PostgreSQL, JWT, Bcrypt |
-| Infra | Docker, Docker Compose, NGINX, PM2, DigitalOcean |
+| Infra | Docker, Docker Compose, Vercel, NGINX, PM2, DigitalOcean |
 
 ## Arquitetura
 
@@ -114,7 +114,7 @@ Requisito: `npm install` em `frontend/` (para o Vite em modo dev).
 ### Opção 2: Produção local
 
 ```bash
-npm run build    # frontend → backend/public + compila API
+npm run build    # frontend → backend/public (build:server) + compila API
 npm run start    # node dist/server.js
 ```
 
@@ -156,6 +156,62 @@ Na tela **Usuários**, o administrador pode:
 Perfis legados (`FARMACIA`, `ESTOQUE`, etc.) permanecem no banco; ao editar, migre para Operacional ou Administrador.
 
 Após atualizar o schema, execute `npx prisma migrate deploy` e `npx prisma db seed` no backend.
+
+## Deploy na Vercel
+
+O repositório está preparado para **dois serviços** no mesmo projeto (recurso experimental da Vercel), definidos em `vercel.json` na raiz:
+
+| Serviço | Pasta | Rota |
+|---------|-------|------|
+| Frontend (Vite) | `frontend/` | `/` |
+| Backend (Express serverless) | `backend/` | `/_/backend` |
+
+### 1. Banco de dados
+
+Use um PostgreSQL gerenciado (Neon, Supabase, Vercel Postgres, etc.) e copie a connection string.
+
+### 2. Importar no painel Vercel
+
+1. Conecte o repositório GitHub.
+2. Confirme que o **Root Directory** é `./` (raiz do monorepo).
+3. A Vercel deve detectar `vercel.json` e pedir o layout com **frontend** + **backend**.
+
+### 3. Variáveis de ambiente (serviço **backend**)
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `DATABASE_URL` | Sim | URL PostgreSQL |
+| `JWT_SECRET` | Sim | Mín. 32 caracteres |
+| `JWT_REFRESH_SECRET` | Sim | Mín. 32 caracteres |
+| `NODE_ENV` | Sim | `production` |
+| `CRON_SECRET` | Recomendado | Protege `GET /api/cron/expiration` |
+| `FRONTEND_URL` | Opcional | URL pública do app (domínio customizado) |
+| `SMTP_*` | Opcional | Recuperação de senha por e-mail |
+
+O build do backend executa `prisma migrate deploy` (`vercel-build`). Na primeira implantação, `DATABASE_URL` já deve estar configurada.
+
+### 4. Frontend
+
+A Vercel injeta `VITE_BACKEND_URL=/_/backend` no build do frontend. O app monta a API em `/_/backend/api` automaticamente. Em desenvolvimento local (servidor unificado), o padrão continua `/api` — configure `frontend/.env` conforme `.env.example`.
+
+### 5. Cron de vencimentos
+
+Agendado em `backend/vercel.json` (diário às 06:00 UTC). A Vercel envia `Authorization: Bearer <CRON_SECRET>` quando `CRON_SECRET` está definida.
+
+### 6. Verificação pós-deploy
+
+- UI: `https://<seu-projeto>.vercel.app`
+- Health: `https://<seu-projeto>.vercel.app/_/backend/api/health`
+- Swagger: `https://<seu-projeto>.vercel.app/_/backend/api/docs`
+
+### Produção local / Docker
+
+Continua com **um servidor** (frontend em `backend/public`):
+
+```bash
+npm run build && npm run start
+# ou: cd frontend && npm run build:server
+```
 
 ## Deploy DigitalOcean
 

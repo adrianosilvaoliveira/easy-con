@@ -3,10 +3,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function vercelOrigin(): string | undefined {
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return undefined;
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3333),
-  API_URL: z.string().url().default('http://localhost:3333'),
+  API_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
@@ -23,6 +30,8 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().optional(),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),
   RATE_LIMIT_MAX: z.coerce.number().default(100),
+  /** Protege o cron da Vercel (`Authorization: Bearer <CRON_SECRET>`) */
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -33,9 +42,11 @@ if (!parsed.success) {
 }
 
 const data = parsed.data;
+const defaultOrigin = vercelOrigin() ?? 'http://localhost:3333';
 
 export const env = {
   ...data,
-  /** Mesma origem quando frontend é servido pelo Express */
-  corsOrigin: data.FRONTEND_URL ?? data.API_URL,
+  API_URL: data.API_URL ?? defaultOrigin,
+  /** Mesma origem no Vercel (frontend + API no mesmo domínio) ou FRONTEND_URL explícita */
+  corsOrigin: data.FRONTEND_URL ?? vercelOrigin() ?? data.API_URL ?? defaultOrigin,
 };

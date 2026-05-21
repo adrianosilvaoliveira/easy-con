@@ -61,7 +61,24 @@ export async function attachFrontend(app: Express): Promise<void> {
     return;
   }
 
-  app.use(express.static(publicDir, { index: false }));
-  app.get('*', spaFallback);
+  app.use(
+    express.static(publicDir, {
+      index: false,
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      },
+    })
+  );
+
+  app.get('*', (req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) {
+      next();
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    spaFallback(req, res, next);
+  });
   logger.info(`Frontend estático em ${publicDir}`);
 }

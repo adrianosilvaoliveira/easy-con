@@ -1,11 +1,13 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Plus } from 'lucide-react';
+import { ClipboardList, ClipboardCheck, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
+import { InventoryCountPanel } from '@/components/inventory/InventoryCountPanel';
 import { formatDateTime } from '@/utils/format';
 
 interface InventoryRecord {
@@ -19,6 +21,7 @@ interface InventoryRecord {
 
 export function InventoryPage() {
   const queryClient = useQueryClient();
+  const [countingId, setCountingId] = useState<string | null>(null);
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -28,22 +31,19 @@ export function InventoryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['inventories'],
     queryFn: () => api.get('/inventory', { params: { limit: 50 } }).then((r) => r.data),
+    enabled: !countingId,
   });
 
   const createMutation = useMutation({
     mutationFn: (locationId: string) => api.post('/inventory', { locationId }),
-    onSuccess: () => {
-      toast.success('Inventário iniciado');
+    onSuccess: (res) => {
+      toast.success('Inventário iniciado — informe as contagens');
       queryClient.invalidateQueries({ queryKey: ['inventories'] });
+      const id = res.data?.data?.id;
+      if (id) setCountingId(id);
     },
-    onError: () => toast.error('Erro ao iniciar inventário'),
-  });
-
-  const completeMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/inventory/${id}/complete`, { autoAdjust: true }),
-    onSuccess: () => {
-      toast.success('Inventário concluído com ajustes');
-      queryClient.invalidateQueries({ queryKey: ['inventories'] });
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message ?? 'Erro ao iniciar inventário');
     },
   });
 
@@ -53,10 +53,29 @@ export function InventoryPage() {
     CANCELADO: 'danger',
   };
 
+  if (countingId) {
+    return (
+      <div className="page-content">
+        <PageHeader title="Contagem de inventário" />
+        <InventoryCountPanel
+          inventoryId={countingId}
+          onBack={() => setCountingId(null)}
+          onCompleted={() => setCountingId(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="page-content">
       <PageHeader title="Inventário" />
-      <div className="flex flex-wrap gap-2">
+
+      <div className="card">
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
+          Inicie um inventário por local. Depois informe a quantidade contada de cada produto antes de
+          concluir.
+        </p>
+        <div className="flex flex-wrap gap-2">
           {locations?.map((l: { id: string; name: string }) => (
             <Button
               key={l.id}
@@ -68,6 +87,7 @@ export function InventoryPage() {
               <Plus className="h-3 w-3" /> {l.name}
             </Button>
           ))}
+        </div>
       </div>
 
       <DataTable<InventoryRecord>
@@ -77,7 +97,13 @@ export function InventoryPage() {
         emptyTitle="Nenhum inventário registrado"
         columns={[
           { key: 'location', header: 'Local', render: (i) => i.location.name },
-          { key: 'status', header: 'Status', render: (i) => <Badge variant={statusVariant[i.status]}>{i.status.replace(/_/g, ' ')}</Badge> },
+          {
+            key: 'status',
+            header: 'Status',
+            render: (i) => (
+              <Badge variant={statusVariant[i.status]}>{i.status.replace(/_/g, ' ')}</Badge>
+            ),
+          },
           { key: 'user', header: 'Responsável', render: (i) => i.user.name },
           { key: 'started', header: 'Início', render: (i) => formatDateTime(i.startedAt) },
           { key: 'items', header: 'Itens', render: (i) => i._count?.items ?? 0 },
@@ -86,10 +112,15 @@ export function InventoryPage() {
             header: 'Ações',
             render: (i) =>
               i.status === 'EM_ANDAMENTO' ? (
-                <Button size="sm" onClick={() => completeMutation.mutate(i.id)} loading={completeMutation.isPending}>
-                  Concluir
+                <Button size="sm" onClick={() => setCountingId(i.id)}>
+                  <ClipboardCheck className="h-3.5 w-3.5" />
+                  Contar
                 </Button>
-              ) : null,
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => setCountingId(i.id)}>
+                  Ver
+                </Button>
+              ),
           },
         ]}
       />

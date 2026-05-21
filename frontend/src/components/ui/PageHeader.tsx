@@ -29,7 +29,7 @@ export function PageHeader({ title, action }: PageHeaderProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
       <nav
-        className="flex min-w-0 flex-wrap items-center gap-1 text-sm text-slate-500"
+        className="flex min-w-0 flex-wrap items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300"
         aria-label="Navegação da página"
       >
         <Link
@@ -45,9 +45,9 @@ export function PageHeader({ title, action }: PageHeaderProps) {
           const label = routeLabels[seg] || seg;
           return (
             <span key={path} className="flex items-center gap-1">
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               {isLast ? (
-                <h1 className="truncate text-base font-semibold text-slate-900 sm:text-lg">
+                <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
                   {title}
                 </h1>
               ) : (
@@ -61,7 +61,7 @@ export function PageHeader({ title, action }: PageHeaderProps) {
         {segments.length === 0 && (
           <>
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <h1 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h1>
+            <h1 className="text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">{title}</h1>
           </>
         )}
       </nav>

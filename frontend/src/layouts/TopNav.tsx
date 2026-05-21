@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Library,
@@ -11,19 +11,16 @@ import {
   CalendarClock,
   FileText,
   Users,
-  Settings,
-  LogOut,
   Menu,
   X,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/authStore';
-import api from '@/services/api';
 import { useState, useEffect } from 'react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
-import { getRoleLabel } from '@/constants/roles';
+import { UserMenu } from '@/components/layout/UserMenu';
 
 // < 1024px → drawer | 1024–1279px → ícones | ≥ 1280px → texto em linha única
 
@@ -49,6 +46,7 @@ function NavItem({
   end,
   onClick,
   mode = 'full',
+  variant = 'light',
 }: {
   to: string;
   label: string;
@@ -57,6 +55,7 @@ function NavItem({
   end?: boolean;
   onClick?: () => void;
   mode?: 'icon' | 'compact' | 'full';
+  variant?: 'light' | 'dark';
 }) {
   const displayLabel = mode === 'compact' ? shortLabel : label;
 
@@ -75,8 +74,12 @@ function NavItem({
           mode === 'full' &&
             'flex-1 basis-0 justify-center gap-1.5 px-2 py-1.5 text-xs xl:gap-2 xl:px-2.5 xl:text-sm',
           isActive
-            ? 'bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-100'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            ? variant === 'dark'
+              ? 'bg-slate-700 text-white shadow-sm ring-1 ring-slate-600'
+              : 'bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-100'
+            : variant === 'dark'
+              ? 'text-slate-300 hover:bg-slate-700/80 hover:text-white'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
         )
       }
     >
@@ -94,8 +97,7 @@ function NavItem({
 }
 
 export function TopNav() {
-  const { user, logout, hasPermission, refreshToken } = useAuthStore();
-  const navigate = useNavigate();
+  const { hasPermission } = useAuthStore();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -119,18 +121,9 @@ export function TopNav() {
     };
   }, [menuOpen]);
 
-  const handleLogout = async () => {
-    try {
-      if (refreshToken) await api.post('/auth/logout', { refreshToken });
-    } finally {
-      logout();
-      navigate('/login');
-    }
-  };
-
   return (
     <>
-      <header className="sticky top-0 z-40 w-full max-w-[100vw] border-b border-surface-border bg-white/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 w-full max-w-[100vw] border-b border-slate-700 bg-[#1E293B]">
         <div className="grid h-14 w-full min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 px-3 sm:h-16 sm:gap-3 sm:px-5 lg:px-6 xl:px-8">
           {/* Marca */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
@@ -138,21 +131,13 @@ export function TopNav() {
               <button
                 type="button"
                 onClick={() => setMenuOpen(true)}
-                className="shrink-0 rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+                className="shrink-0 rounded-lg p-2 text-slate-300 hover:bg-slate-700/80 hover:text-white"
                 aria-label="Abrir menu"
               >
                 <Menu className="h-5 w-5" />
               </button>
             )}
             <AppLogo size="md" />
-            <div className="hidden min-w-0 overflow-hidden md:block">
-              <p className="truncate text-sm font-semibold leading-tight text-slate-900">
-                Easy Stock
-              </p>
-              <p className="hidden truncate text-xs text-slate-500 2xl:block">
-                Controle de Estoque
-              </p>
-            </div>
           </div>
 
           {/* Navegação — uma linha, distribuição uniforme */}
@@ -175,43 +160,14 @@ export function TopNav() {
                   icon={icon}
                   end={to === '/'}
                   mode={navMode}
+                  variant="dark"
                 />
               ))}
             </nav>
           )}
 
-          {/* Ações */}
-          <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-            <NavLink
-              to="/configuracoes"
-              title="Configurações"
-              aria-label="Configurações"
-              className={({ isActive }) =>
-                cn(
-                  'shrink-0 rounded-lg p-2 transition',
-                  isActive
-                    ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-100'
-                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-                )
-              }
-            >
-              <Settings className="h-5 w-5" />
-            </NavLink>
-
-            <div className="hidden min-w-0 max-w-[120px] text-right 2xl:block">
-              <p className="truncate text-sm font-medium text-slate-900">{user?.name}</p>
-              <p className="truncate text-xs text-slate-500">{user?.role ? getRoleLabel(user.role) : ''}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"
-              title="Sair"
-              aria-label="Sair"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
+          <div className="flex shrink-0 items-center justify-end">
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -224,23 +180,20 @@ export function TopNav() {
             onClick={() => setMenuOpen(false)}
             aria-label="Fechar menu"
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[min(100vw-3rem,300px)] flex-col bg-white shadow-elevated">
-            <div className="flex items-center justify-between border-b border-surface-border px-4 py-4">
-              <div className="flex min-w-0 items-center gap-2">
-                <AppLogo size="md" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">Easy Stock</p>
-                  <p className="truncate text-xs text-slate-500">{user?.name}</p>
-                </div>
+          <aside className="absolute left-0 top-0 flex h-full w-[min(100vw-3rem,300px)] flex-col bg-white shadow-elevated dark:bg-slate-900">
+            <div className="flex items-center justify-between gap-2 border-b border-surface-border px-4 py-4 dark:border-slate-700">
+              <AppLogo size="md" />
+              <div className="flex items-center gap-2">
+                <UserMenu />
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(false)}
+                  className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                  aria-label="Fechar"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(false)}
-                className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                aria-label="Fechar"
-              >
-                <X className="h-5 w-5" />
-              </button>
             </div>
 
             <nav className="flex-1 overflow-y-auto overscroll-contain p-3">
@@ -257,34 +210,8 @@ export function TopNav() {
                     onClick={() => setMenuOpen(false)}
                   />
                 ))}
-                <NavLink
-                  to="/configuracoes"
-                  onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition',
-                      isActive
-                        ? 'bg-primary-50 text-primary-700'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    )
-                  }
-                >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  Configurações
-                </NavLink>
               </div>
             </nav>
-
-            <div className="border-t border-surface-border p-4">
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                <LogOut className="h-4 w-4" />
-                Sair
-              </button>
-            </div>
           </aside>
         </div>
       )}

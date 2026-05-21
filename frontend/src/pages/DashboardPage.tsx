@@ -30,6 +30,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import type { DashboardMetrics, EntriesExitsChartData, StockMovement } from '@/types';
 import { ChartPeriodFilter, type ChartPeriod } from '@/components/dashboard/ChartPeriodFilter';
 import { formatDate, formatDateTime, movementTypeLabel } from '@/utils/format';
+import { CHART_AXIS_TICK, CHART_GRID_STROKE } from '@/constants/chartTheme';
 
 function KpiCard({
   title,
@@ -47,9 +48,9 @@ function KpiCard({
   return (
     <div className="card flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-xs font-medium text-slate-500 sm:text-sm">{title}</p>
-        <p className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">{value}</p>
-        {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+        <p className="text-xs font-semibold text-slate-600 sm:text-sm dark:text-slate-300">{title}</p>
+        <p className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">{value}</p>
+        {subtitle && <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </div>
       <div className={`shrink-0 rounded-xl p-2.5 sm:p-3 ${color}`}>
         <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -158,14 +159,16 @@ export function DashboardPage() {
 
           <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="card min-w-0">
-              <h2 className="mb-3 text-base font-semibold sm:text-lg">Vencimentos por Mês</h2>
+              <h2 className="mb-3 text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-100">
+                Vencimentos por Mês
+              </h2>
               <ChartContainer height={240} mobileHeight={180}>
                 {({ width, height }) => (
                   <ResponsiveContainer width={width} height={height}>
                     <BarChart data={expMetrics.expiringByMonth}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-                      <YAxis tick={{ fontSize: 10 }} width={32} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+                      <XAxis dataKey="month" tick={CHART_AXIS_TICK} tickFormatter={(v) => v.slice(5)} />
+                      <YAxis tick={CHART_AXIS_TICK} width={36} />
                       <Tooltip />
                       <Bar dataKey="count" name="Qtd" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -179,10 +182,10 @@ export function DashboardPage() {
               <div className="table-container">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-red-50/50">
-                      <th className="px-3 py-2 text-left">Produto</th>
-                      <th className="px-3 py-2 text-left">Lote</th>
-                      <th className="px-3 py-2 text-right">Validade</th>
+                    <tr className="border-b border-slate-300 bg-red-100 dark:border-slate-600 dark:bg-red-950/40">
+                      <th className="px-3 py-2 text-left font-semibold text-slate-800">Produto</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-800">Lote</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-800">Validade</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -193,7 +196,7 @@ export function DashboardPage() {
                       status: ExpirationStatusType;
                       product: { name: string };
                     }) => (
-                      <tr key={b.id} className="border-b">
+                      <tr key={b.id} className="border-b border-slate-200">
                         <td className="truncate px-3 py-2 max-w-[120px]">{b.product.name}</td>
                         <td className="px-3 py-2">{b.batchNumber}</td>
                         <td className="px-3 py-2 text-right">
@@ -203,7 +206,7 @@ export function DashboardPage() {
                     ))}
                     {!expMetrics.criticalBatches?.length && (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                        <td colSpan={3} className="px-4 py-6 text-center font-medium text-slate-600">
                           Nenhum lote crítico
                         </td>
                       </tr>
@@ -218,7 +221,9 @@ export function DashboardPage() {
 
       <div className="card w-full min-w-0 max-w-full overflow-hidden">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
-          <h2 className="text-base font-semibold sm:text-lg">Entradas x Saídas</h2>
+          <h2 className="text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-100">
+            Entradas x Saídas
+          </h2>
           <ChartPeriodFilter value={chartPeriod} onChange={setChartPeriod} />
         </div>
         <div className={chartLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
@@ -230,13 +235,13 @@ export function DashboardPage() {
               data={chartResponse?.chartData ?? []}
               margin={{ top: 8, right: 8, left: -8, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10 }}
+                tick={CHART_AXIS_TICK}
                 interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 10 }} width={32} />
+              <YAxis tick={CHART_AXIS_TICK} width={36} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Area type="monotone" dataKey="entries" name="Entradas" stroke="#2563eb" fill="#93c5fd" fillOpacity={0.4} />
@@ -255,15 +260,21 @@ export function DashboardPage() {
           <div className="table-container">
             <table className="w-full min-w-[280px] text-sm">
               <thead>
-                <tr className="border-b bg-red-50/50">
-                  <th className="px-3 py-2 text-left text-xs sm:px-4 sm:text-sm">Produto</th>
-                  <th className="px-3 py-2 text-right text-xs sm:px-4 sm:text-sm">Atual</th>
-                  <th className="hidden px-3 py-2 text-right text-xs sm:table-cell sm:px-4 sm:text-sm">Mínimo</th>
+                <tr className="border-b border-slate-300 bg-red-100">
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-800 sm:px-4 sm:text-sm">
+                    Produto
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-slate-800 sm:px-4 sm:text-sm">
+                    Atual
+                  </th>
+                  <th className="hidden px-3 py-2 text-right text-xs font-semibold text-slate-800 sm:table-cell sm:px-4 sm:text-sm">
+                    Mínimo
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {metrics.belowMin.slice(0, 5).map((p) => (
-                  <tr key={p.id} className="border-b">
+                  <tr key={p.id} className="border-b border-slate-200">
                     <td className="max-w-[140px] truncate px-3 py-2 sm:max-w-none sm:px-4">{p.name}</td>
                     <td className="px-3 py-2 text-right font-medium text-red-600 sm:px-4">{p.current}</td>
                     <td className="hidden px-3 py-2 text-right sm:table-cell sm:px-4">{p.minQuantity}</td>
@@ -271,7 +282,7 @@ export function DashboardPage() {
                 ))}
                 {!metrics.belowMin.length && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={3} className="px-4 py-6 text-center font-medium text-slate-600">
                       Nenhum alerta
                     </td>
                   </tr>
@@ -288,15 +299,21 @@ export function DashboardPage() {
           <div className="table-container">
             <table className="w-full min-w-[280px] text-sm">
               <thead>
-                <tr className="border-b bg-amber-50/50">
-                  <th className="px-3 py-2 text-left text-xs sm:px-4 sm:text-sm">Produto</th>
-                  <th className="hidden px-3 py-2 text-left text-xs sm:table-cell sm:px-4 sm:text-sm">Lote</th>
-                  <th className="px-3 py-2 text-right text-xs sm:px-4 sm:text-sm">Validade</th>
+                <tr className="border-b border-slate-300 bg-amber-100">
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-800 sm:px-4 sm:text-sm">
+                    Produto
+                  </th>
+                  <th className="hidden px-3 py-2 text-left text-xs font-semibold text-slate-800 sm:table-cell sm:px-4 sm:text-sm">
+                    Lote
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-slate-800 sm:px-4 sm:text-sm">
+                    Validade
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {metrics.expiring.slice(0, 5).map((b) => (
-                  <tr key={b.id} className="border-b">
+                  <tr key={b.id} className="border-b border-slate-200">
                     <td className="max-w-[140px] truncate px-3 py-2 sm:max-w-none sm:px-4">{b.product.name}</td>
                     <td className="hidden px-3 py-2 sm:table-cell sm:px-4">{b.batchNumber}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right sm:px-4">{formatDate(b.expirationDate)}</td>
@@ -304,7 +321,7 @@ export function DashboardPage() {
                 ))}
                 {!metrics.expiring.length && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={3} className="px-4 py-6 text-center font-medium text-slate-600">
                       Nenhum vencimento próximo
                     </td>
                   </tr>
@@ -316,7 +333,9 @@ export function DashboardPage() {
       </div>
 
       <div className="min-w-0">
-        <h2 className="mb-2 text-base font-semibold sm:mb-3 sm:text-lg">Movimentações Recentes</h2>
+        <h2 className="mb-2 text-base font-semibold text-slate-900 sm:mb-3 sm:text-lg dark:text-slate-100">
+          Movimentações Recentes
+        </h2>
         <DataTable<StockMovement>
           columns={[
             { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },

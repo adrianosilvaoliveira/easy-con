@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
-import { env } from '../configs/env';
+import { OrganizationService } from '../modules/organization/OrganizationService';
 
 interface PdfColumn {
   header: string;
@@ -18,7 +18,8 @@ interface PdfOptions {
 }
 
 export class PdfProvider {
-  static generate(res: Response, options: PdfOptions): void {
+  static async generate(res: Response, options: PdfOptions): Promise<void> {
+    const org = await OrganizationService.get();
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
     const date = new Date().toLocaleString('pt-BR');
 
@@ -34,10 +35,15 @@ export class PdfProvider {
     doc
       .fontSize(18)
       .font('Helvetica-Bold')
-      .text(env.HOSPITAL_NAME, { align: 'center' });
-    doc.fontSize(9).font('Helvetica').text(env.HOSPITAL_ADDRESS, { align: 'center' });
-    if (env.HOSPITAL_CNPJ) {
-      doc.text(`CNPJ: ${env.HOSPITAL_CNPJ}`, { align: 'center' });
+      .text(org.name, { align: 'center' });
+    if (org.address) {
+      doc.fontSize(9).font('Helvetica').text(org.address, { align: 'center' });
+    }
+    if (org.cnpj) {
+      doc.text(`CNPJ: ${org.cnpj}`, { align: 'center' });
+    }
+    if (org.phone) {
+      doc.text(`Tel: ${org.phone}`, { align: 'center' });
     }
     doc.moveDown(0.5);
     doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#e5e7eb');

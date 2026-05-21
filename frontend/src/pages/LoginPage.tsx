@@ -22,7 +22,6 @@ export function LoginPage() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { email: 'admin@hospital.com', password: 'Admin@123' },
   });
 
   const mutation = useMutation({
@@ -55,7 +54,7 @@ export function LoginPage() {
               className="mb-6 h-12 w-auto object-contain object-left lg:hidden"
             />
             <h2 className="text-2xl font-bold text-slate-900">Entrar no sistema</h2>
-            <p className="text-slate-500">Acesse com suas credenciais do Easy Stock</p>
+            <p className="text-slate-500">Acesse com suas credenciais</p>
           </div>
           <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
             <Input label="E-mail" type="email" error={errors.email?.message} {...register('email')} />
@@ -64,11 +63,6 @@ export function LoginPage() {
               Entrar
             </Button>
           </form>
-          <p className="mt-6 text-center text-xs text-slate-400">
-            Admin: admin@hospital.com / Admin@123
-            <br />
-            Operacional: operacional@hospital.com / Oper@123
-          </p>
         </div>
       </div>
     </div>
