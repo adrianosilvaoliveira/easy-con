@@ -3,15 +3,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-/** Vercel Postgres injeta POSTGRES_*; Prisma usa DATABASE_URL + DIRECT_URL */
+/** Vercel Postgres: POSTGRES_*, PRISMA_DATABASE_URL ou DATABASE_URL */
+if (!process.env.DATABASE_URL && process.env.PRISMA_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.PRISMA_DATABASE_URL;
+}
 if (!process.env.DATABASE_URL && process.env.POSTGRES_PRISMA_URL) {
   process.env.DATABASE_URL = process.env.POSTGRES_PRISMA_URL;
 }
-if (!process.env.DATABASE_URL && process.env.POSTGRES_URL) {
-  process.env.DATABASE_URL = process.env.POSTGRES_URL;
-}
 if (!process.env.DIRECT_URL && process.env.POSTGRES_URL_NON_POOLING) {
   process.env.DIRECT_URL = process.env.POSTGRES_URL_NON_POOLING;
+}
+if (!process.env.DIRECT_URL && process.env.POSTGRES_URL) {
+  process.env.DIRECT_URL = process.env.POSTGRES_URL;
 }
 if (!process.env.DIRECT_URL && process.env.DATABASE_URL) {
   process.env.DIRECT_URL = process.env.DATABASE_URL;

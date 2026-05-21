@@ -189,12 +189,22 @@ O código mapeia automaticamente para o Prisma:
 Não é obrigatório copiar manualmente, desde que as variáveis `POSTGRES_*` estejam no serviço **backend**.
 
 5. **Redeploy** do backend — o build executa `prisma migrate deploy` e cria as tabelas.
-6. **Seed** (usuários iniciais), uma vez:
-   ```bash
-   cd backend
-   vercel env pull .env   # traz POSTGRES_* do projeto
-   npx prisma db seed
-   ```
+6. **Seed** (usuários iniciais), uma vez — as URLs do Postgres **não vêm preenchidas** no `vercel env pull`; copie do painel:
+
+   1. Vercel → **Storage** → banco Postgres → aba **`.env.local`** (ou **Connect**).
+   2. Copie `DATABASE_URL` / `PRISMA_DATABASE_URL` e `POSTGRES_URL`.
+   3. Crie `backend/.env.vercel` (modelo em `backend/.env.vercel.example`):
+      ```env
+      DATABASE_URL="<PRISMA_DATABASE_URL ou DATABASE_URL>"
+      DIRECT_URL="<POSTGRES_URL>"
+      ```
+   4. Rode o script:
+      ```powershell
+      cd backend
+      .\scripts\seed-vercel.ps1
+      ```
+
+   **Login após o seed:** `admin@hospital.com` / `Admin@123` (troque a senha depois).
 
 #### Desenvolvimento local
 

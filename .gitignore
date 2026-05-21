@@ -4,6 +4,8 @@ build/
 backend/public/
 frontend/dist/
 .env
+.env.vercel
+.env.production.local
 *.log
 logs/
 .DS_Store
@@ -11,3 +13,4 @@ coverage/
 .vscode/
 .idea/
 *.pem
+.vercel
