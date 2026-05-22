@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import type { StockLocation, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { cn } from '@/utils/cn';
 
 export function StockPage() {
   const [search, setSearch] = useState('');
@@ -40,6 +41,10 @@ export function StockPage() {
 
   const total = items?.meta?.total;
 
+  const toggleLocationFilter = (id: string) => {
+    setLocationId((current) => (current === id ? '' : id));
+  };
+
   return (
     <div className="page-content">
       <PageHeader title="Estoque" />
@@ -52,28 +57,48 @@ export function StockPage() {
         </div>
       ) : (
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {locations?.map((loc) => (
-            <div key={loc.id} className="card">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-primary-600" />
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">{loc.name}</h3>
+          {locations?.map((loc) => {
+            const selected = locationId === loc.id;
+            return (
+              <button
+                key={loc.id}
+                type="button"
+                onClick={() => toggleLocationFilter(loc.id)}
+                aria-pressed={selected}
+                aria-label={`Filtrar por ${loc.name}${selected ? ' (ativo, clique para remover)' : ''}`}
+                className={cn(
+                  'card w-full text-left transition',
+                  'cursor-pointer hover:border-primary-300 hover:shadow-card dark:hover:border-primary-700',
+                  selected &&
+                    'border-primary-400 ring-2 ring-primary-500/60 ring-offset-2 ring-offset-slate-50 dark:border-primary-600 dark:ring-primary-500/50 dark:ring-offset-slate-900'
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <MapPin
+                        className={cn(
+                          'h-4 w-4',
+                          selected ? 'text-primary-700 dark:text-primary-300' : 'text-primary-600'
+                        )}
+                      />
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100">{loc.name}</h3>
+                    </div>
+                    <p className="mt-1 font-mono text-xs text-slate-500">{loc.code}</p>
+                    <Badge variant="info" className="mt-2">
+                      {loc.type.replace(/_/g, ' ')}
+                    </Badge>
                   </div>
-                  <p className="mt-1 font-mono text-xs text-slate-500">{loc.code}</p>
-                  <Badge variant="info" className="mt-2">
-                    {loc.type.replace(/_/g, ' ')}
-                  </Badge>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-primary-700 dark:text-primary-400">
+                      {loc.totalQuantity ?? 0}
+                    </p>
+                    <p className="text-xs text-slate-400">unidades</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary-700 dark:text-primary-400">
-                    {loc.totalQuantity ?? 0}
-                  </p>
-                  <p className="text-xs text-slate-400">unidades</p>
-                </div>
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
 
