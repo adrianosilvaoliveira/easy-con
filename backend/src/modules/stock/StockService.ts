@@ -167,11 +167,15 @@ export class StockService {
 
     if (filters.locationId) where.locationId = filters.locationId;
     if (filters.productId) where.productId = filters.productId;
+    if (filters.batch?.trim()) {
+      where.batch = { batchNumber: { contains: filters.batch.trim(), mode: 'insensitive' } };
+    }
     if (filters.search) {
       where.product = {
         OR: [
           { name: { contains: filters.search, mode: 'insensitive' } },
           { internalCode: { contains: filters.search, mode: 'insensitive' } },
+          { barcode: { contains: filters.search, mode: 'insensitive' } },
         ],
       };
     }
