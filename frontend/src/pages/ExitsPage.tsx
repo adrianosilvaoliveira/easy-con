@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, ArrowUpFromLine } from 'lucide-react';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
+import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel } from '@/utils/format';
 
@@ -27,11 +28,6 @@ const exitSchema = z.object({
 export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const queryClient = useQueryClient();
-
-  const { data: products } = useQuery({
-    queryKey: ['products-list'],
-    queryFn: () => api.get('/products', { params: { limit: 200 } }).then((r) => r.data.data),
-  });
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -49,9 +45,15 @@ export function ExitsPage() {
         })),
   });
 
-  const { register, handleSubmit, reset } = useForm<z.infer<typeof exitSchema>>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    control,
+    formState: { errors },
+  } = useForm<z.infer<typeof exitSchema>>({
     resolver: zodResolver(exitSchema),
-    defaultValues: { type: 'SAIDA_CONSUMO' },
+    defaultValues: { type: 'SAIDA_CONSUMO', productId: '' },
   });
 
   const mutation = useMutation({
@@ -103,13 +105,18 @@ export function ExitsPage() {
             </select>
           </div>
           <div>
-            <label className="form-label">Produto</label>
-            <select className="input-field" {...register('productId')}>
-              <option value="">Selecione...</option>
-              {products?.map((p: { id: string; name: string; internalCode: string }) => (
-                <option key={p.id} value={p.id}>{p.internalCode} - {p.name}</option>
-              ))}
-            </select>
+            <Controller
+              name="productId"
+              control={control}
+              render={({ field }) => (
+                <ProductSearchSelect
+                  value={field.value}
+                  onChange={(id) => field.onChange(id)}
+                  error={errors.productId?.message}
+                  required
+                />
+              )}
+            />
           </div>
           <div>
             <label className="form-label">Origem</label>
