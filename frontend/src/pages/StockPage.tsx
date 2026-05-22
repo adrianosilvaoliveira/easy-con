@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Boxes, MapPin, AlertTriangle, Search } from 'lucide-react';
+import { Boxes, MapPin, AlertTriangle, Search, X } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -41,8 +41,20 @@ export function StockPage() {
 
   const total = items?.meta?.total;
 
+  const selectedLocation = useMemo(
+    () => locations?.find((loc) => loc.id === locationId),
+    [locations, locationId]
+  );
+
   const toggleLocationFilter = (id: string) => {
     setLocationId((current) => (current === id ? '' : id));
+  };
+
+  const handleLocationCardKeyDown = (e: KeyboardEvent<HTMLDivElement>, id: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleLocationFilter(id);
+    }
   };
 
   return (
@@ -60,17 +72,20 @@ export function StockPage() {
           {locations?.map((loc) => {
             const selected = locationId === loc.id;
             return (
-              <button
+              <div
                 key={loc.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleLocationFilter(loc.id)}
+                onKeyDown={(e) => handleLocationCardKeyDown(e, loc.id)}
                 aria-pressed={selected}
                 aria-label={`Filtrar por ${loc.name}${selected ? ' (ativo, clique para remover)' : ''}`}
                 className={cn(
-                  'card w-full text-left transition',
-                  'cursor-pointer hover:border-primary-300 hover:shadow-card dark:hover:border-primary-700',
+                  'card w-full cursor-pointer text-left outline-none transition select-none',
+                  'hover:border-primary-400 hover:shadow-md dark:hover:border-primary-500',
+                  'focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900',
                   selected &&
-                    'border-primary-400 ring-2 ring-primary-500/60 ring-offset-2 ring-offset-slate-50 dark:border-primary-600 dark:ring-primary-500/50 dark:ring-offset-slate-900'
+                    'border-2 border-primary-500 bg-primary-50 shadow-md dark:border-primary-400 dark:bg-primary-950/50'
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -96,9 +111,28 @@ export function StockPage() {
                     <p className="text-xs text-slate-400">unidades</p>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
+        </div>
+      )}
+
+      {selectedLocation && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm dark:border-primary-800 dark:bg-primary-950/40">
+          <p className="text-slate-700 dark:text-slate-200">
+            Filtrando por <span className="font-semibold text-primary-800 dark:text-primary-200">{selectedLocation.name}</span>
+            {typeof total === 'number' && (
+              <span className="text-slate-500 dark:text-slate-400"> — {total} registro(s)</span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setLocationId('')}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-700 transition hover:bg-primary-100 dark:text-primary-300 dark:hover:bg-primary-900/60"
+          >
+            <X className="h-3.5 w-3.5" />
+            Limpar filtro
+          </button>
         </div>
       )}
 
