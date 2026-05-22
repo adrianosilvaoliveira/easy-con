@@ -45,7 +45,12 @@ const createUserSchema = baseUserSchema.extend({
 type CreateFormData = z.infer<typeof createUserSchema>;
 type EditFormData = z.infer<typeof baseUserSchema> & { password?: string };
 
-export function UsersPage() {
+interface UsersPageProps {
+  /** Renderizado dentro de Configurações (sem cabeçalho de página) */
+  embedded?: boolean;
+}
+
+export function UsersPage({ embedded = false }: UsersPageProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canManageUsers =
     hasPermission('users:CREATE') || hasPermission('users:UPDATE');
@@ -176,19 +181,21 @@ export function UsersPage() {
   };
 
   return (
-    <div className="page-content">
-      <PageHeader
-        title="Usuários"
-        action={
-          canManageUsers ? (
-            <Button onClick={openCreate} className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" /> Novo Usuário
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className={embedded ? 'space-y-4' : 'page-content'}>
+      {!embedded && (
+        <PageHeader
+          title="Usuários"
+          action={
+            canManageUsers ? (
+              <Button onClick={openCreate} className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" /> Novo Usuário
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -198,7 +205,14 @@ export function UsersPage() {
             className="input-field w-full pl-9"
           />
         </div>
-        <IncludeInactiveFilter checked={includeInactive} onChange={setIncludeInactive} />
+        <div className="flex flex-wrap items-center gap-2">
+          <IncludeInactiveFilter checked={includeInactive} onChange={setIncludeInactive} />
+          {embedded && canManageUsers && (
+            <Button onClick={openCreate} className="w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Novo Usuário
+            </Button>
+          )}
+        </div>
       </div>
 
       <DataTable<UserListRecord>

@@ -10,7 +10,6 @@ import {
   ClipboardList,
   CalendarClock,
   FileText,
-  Users,
   Menu,
   X,
 } from 'lucide-react';
@@ -35,7 +34,6 @@ const navItems = [
   { to: '/inventario', label: 'Inventário', shortLabel: 'Invent.', icon: ClipboardList, permission: ROUTE_PERMISSIONS.inventario },
   { to: '/vencimentos', label: 'Vencimentos', shortLabel: 'Vencim.', icon: CalendarClock, permission: ROUTE_PERMISSIONS.vencimentos },
   { to: '/relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText, permission: ROUTE_PERMISSIONS.relatorios },
-  { to: '/usuarios', label: 'Usuários', shortLabel: 'Usuários', icon: Users, permission: ROUTE_PERMISSIONS.usuarios },
 ];
 
 function NavItem({

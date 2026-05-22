@@ -1,10 +1,13 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
+import { UsersPage } from '@/pages/UsersPage';
+import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SettingsNavItem } from '@/components/settings/SettingsNavItem';
 import { SettingsGroupPanel } from '@/components/settings/SettingsGroupPanel';
@@ -21,13 +24,20 @@ import type { OrganizationSettings } from '@/types';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
-type SettingsSection = 'gerais' | 'empresa' | 'aparencia';
+type SettingsSection = 'gerais' | 'empresa' | 'aparencia' | 'usuarios';
 
-const NAV_ITEMS: { id: SettingsSection; label: string; description: string }[] = [
+const NAV_ITEMS: { id: SettingsSection; label: string; description: string; permission?: string }[] = [
   { id: 'gerais', label: 'Gerais', description: 'Conta e perfil de acesso' },
   { id: 'empresa', label: 'Empresa', description: 'Dados institucionais e relatórios' },
+  { id: 'usuarios', label: 'Usuários', description: 'Contas e permissões de acesso', permission: ROUTE_PERMISSIONS.usuarios },
   { id: 'aparencia', label: 'Aparência', description: 'Tema e visualização' },
 ];
+
+function sectionFromPath(pathname: string): SettingsSection {
+  const segment = pathname.replace(/^\/configuracoes\/?/, '').split('/')[0];
+  if (segment === 'empresa' || segment === 'aparencia' || segment === 'usuarios') return segment;
+  return 'gerais';
+}
 
 const organizationSchema = z.object({
   name: z.string().min(2, 'Nome obrigatório'),
@@ -40,7 +50,9 @@ const organizationSchema = z.object({
 type OrganizationForm = z.infer<typeof organizationSchema>;
 
 export function SettingsPage() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('gerais');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeSection = sectionFromPath(location.pathname);
   const user = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canEditOrg = hasPermission('settings:UPDATE');
@@ -52,7 +64,28 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
 
   const canReadOrg = hasPermission('settings:READ');
-  const visibleNav = NAV_ITEMS.filter((item) => item.id !== 'empresa' || canReadOrg);
+  const canReadUsers = hasPermission(ROUTE_PERMISSIONS.usuarios);
+  const visibleNav = NAV_ITEMS.filter((item) => {
+    if (item.id === 'empresa' && !canReadOrg) return false;
+    if (item.id === 'usuarios' && !canReadUsers) return false;
+    if (item.permission && !hasPermission(item.permission)) return false;
+    return true;
+  });
+
+  useEffect(() => {
+    if (location.pathname === '/configuracoes' || location.pathname === '/configuracoes/') {
+      navigate('/configuracoes/gerais', { replace: true });
+      return;
+    }
+    if (activeSection === 'usuarios' && !canReadUsers) {
+      navigate('/configuracoes/gerais', { replace: true });
+    }
+    if (activeSection === 'empresa' && !canReadOrg) {
+      navigate('/configuracoes/gerais', { replace: true });
+    }
+  }, [location.pathname, activeSection, canReadUsers, canReadOrg, navigate]);
+
+  const pageTitle = activeSection === 'usuarios' ? 'Usuários' : 'Configurações';
 
   const { data: organization, isLoading: orgLoading } = useQuery({
     queryKey: ['organization'],
@@ -118,7 +151,7 @@ export function SettingsPage() {
 
   return (
     <div className="page-content">
-      <PageHeader title="Configurações" />
+      <PageHeader title={pageTitle} />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
           <nav className="flex flex-col gap-2 lg:w-72 lg:shrink-0" aria-label="Grupos de configuração">
@@ -128,7 +161,7 @@ export function SettingsPage() {
                 label={item.label}
                 description={item.description}
                 active={activeSection === item.id}
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => navigate(`/configuracoes/${item.id}`)}
               />
             ))}
           </nav>
@@ -280,6 +313,8 @@ export function SettingsPage() {
                 )}
               </SettingsGroupPanel>
             )}
+
+            {activeSection === 'usuarios' && canReadUsers && <UsersPage embedded />}
 
             {activeSection === 'aparencia' && (
               <SettingsGroupPanel

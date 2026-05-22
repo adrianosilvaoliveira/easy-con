@@ -12,7 +12,6 @@ import { ExitsPage } from '@/pages/ExitsPage';
 import { TransfersPage } from '@/pages/TransfersPage';
 import { InventoryPage } from '@/pages/InventoryPage';
 import { ReportsPage } from '@/pages/ReportsPage';
-import { UsersPage } from '@/pages/UsersPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { CadastrosPage } from '@/pages/CadastrosPage';
 import { ExpirationsPage } from '@/pages/ExpirationsPage';
@@ -53,10 +52,8 @@ export function AppRoutes() {
           <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.relatorios} />}>
             <Route path="relatorios" element={<ReportsPage />} />
           </Route>
-          <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.usuarios} />}>
-            <Route path="usuarios" element={<UsersPage />} />
-          </Route>
-          <Route path="configuracoes" element={<SettingsPage />} />
+          <Route path="usuarios" element={<Navigate to="/configuracoes/usuarios" replace />} />
+          <Route path="configuracoes/*" element={<SettingsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
