@@ -1,15 +1,37 @@
 import { useState, useMemo, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Boxes, MapPin, AlertTriangle, Search, X } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { CardSkeleton } from '@/components/ui/Skeleton';
+import { ProductCatalogPanel } from '@/components/products/ProductCatalogPanel';
 import type { StockLocation, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
+import { useAuthStore } from '@/stores/authStore';
+
+type StockTab = 'itens' | 'produtos';
 
 export function StockPage() {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canViewProducts = hasPermission('products:READ');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const tab: StockTab =
+    canViewProducts && searchParams.get('aba') === 'produtos' ? 'produtos' : 'itens';
+
+  const setTab = (next: StockTab) => {
+    if (next === 'produtos') setSearchParams({ aba: 'produtos' });
+    else setSearchParams({});
+  };
+
+  const stockTabs: { id: StockTab; label: string }[] = [
+    { id: 'itens', label: 'Saldo por lote' },
+    ...(canViewProducts ? [{ id: 'produtos' as const, label: 'Produtos' }] : []),
+  ];
+
   const [search, setSearch] = useState('');
   const [locationId, setLocationId] = useState('');
   const [batch, setBatch] = useState('');
@@ -60,6 +82,31 @@ export function StockPage() {
   return (
     <div className="page-content">
       <PageHeader title="Estoque" />
+
+      {stockTabs.length > 1 && (
+        <div className="flex flex-wrap gap-2 border-b border-surface-border pb-2 dark:border-slate-600">
+          {stockTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'rounded-lg px-4 py-2 text-sm font-medium transition',
+                tab === t.id
+                  ? 'bg-primary-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'produtos' ? (
+        <ProductCatalogPanel allowEdit />
+      ) : (
+        <>
 
       {loadingLoc ? (
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -232,6 +279,8 @@ export function StockPage() {
           },
         ]}
       />
+        </>
+      )}
     </div>
   );
 }

@@ -28,9 +28,7 @@ export function AppRoutes() {
           <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.cadastros} />}>
             <Route path="cadastros" element={<CadastrosPage />} />
           </Route>
-          <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.produtos} />}>
-            <Route path="produtos" element={<ProductsPage />} />
-          </Route>
+          <Route path="produtos" element={<ProductsPage />} />
           <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.estoque} />}>
             <Route path="estoque" element={<StockPage />} />
           </Route>

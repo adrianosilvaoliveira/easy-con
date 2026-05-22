@@ -13,8 +13,10 @@ import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { useAuthStore } from '@/stores/authStore';
 import { DeleteCadastroSection } from '@/components/cadastros/DeleteCadastroSection';
+import { ProductCatalogPanel } from '@/components/products/ProductCatalogPanel';
+import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
 
-type Tab = 'categories' | 'suppliers' | 'locations';
+type Tab = 'categories' | 'products' | 'suppliers' | 'locations';
 
 interface ActiveEntity {
   id: string;
@@ -31,6 +33,7 @@ export function CadastrosPage() {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canDeleteLocation = hasPermission('stock:DELETE');
   const canDeleteCategory = hasPermission('products:DELETE');
+  const canViewProducts = hasPermission(ROUTE_PERMISSIONS.produtos);
   const [tab, setTab] = useState<Tab>('categories');
   const [search, setSearch] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
@@ -42,6 +45,7 @@ export function CadastrosPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'categories', label: 'Categorias' },
+    ...(canViewProducts ? [{ id: 'products' as const, label: 'Produtos' }] : []),
     { id: 'suppliers', label: 'Fornecedores' },
     { id: 'locations', label: 'Locais de Estoque' },
   ];
@@ -51,7 +55,9 @@ export function CadastrosPage() {
       ? '/products/categories'
       : tab === 'suppliers'
         ? '/suppliers'
-        : '/stock/locations';
+        : tab === 'locations'
+          ? '/stock/locations'
+          : null;
 
   const editingLocationId =
     tab === 'locations' && editing?.id ? String(editing.id) : null;
@@ -80,13 +86,14 @@ export function CadastrosPage() {
     queryKey: [tab, search, includeInactive],
     queryFn: () =>
       api
-        .get(endpoint, {
+        .get(endpoint!, {
           params: {
             search: search || undefined,
             includeInactive: includeInactive ? 'true' : undefined,
           },
         })
         .then((r) => r.data.data as ActiveEntity[]),
+    enabled: tab !== 'products' && !!endpoint,
   });
 
   const openCreate = () => {
@@ -114,6 +121,7 @@ export function CadastrosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!endpoint) throw new Error('Cadastro inválido');
       const body: Record<string, unknown> = { ...form };
       if (editing) {
         body.active = active;
@@ -217,6 +225,10 @@ export function CadastrosPage() {
         ))}
       </div>
 
+      {tab === 'products' ? (
+        <ProductCatalogPanel allowCreate allowEdit />
+      ) : (
+        <>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -354,6 +366,8 @@ export function CadastrosPage() {
           </div>
         </div>
       </Modal>
+        </>
+      )}
     </div>
   );
 }
