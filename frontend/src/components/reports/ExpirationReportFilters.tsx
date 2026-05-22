@@ -46,7 +46,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Produto</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Produto</label>
         <select
           className="input-field text-sm"
           value={values.productId || ''}
@@ -61,7 +61,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Categoria</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Categoria</label>
         <select
           className="input-field text-sm"
           value={values.categoryId || ''}
@@ -85,7 +85,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Local de estoque</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Local de estoque</label>
         <select
           className="input-field text-sm"
           value={values.stockLocationId || ''}
@@ -100,7 +100,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Nº do lote</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Nº do lote</label>
         <input
           className="input-field text-sm"
           placeholder="Ex: LOTE-001"
@@ -109,7 +109,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Status vencimento</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Status vencimento</label>
         <select
           className="input-field text-sm"
           value={values.status || ''}
@@ -123,7 +123,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Validade de</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Validade de</label>
         <input
           type="date"
           className="input-field text-sm"
@@ -132,7 +132,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Validade até</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Validade até</label>
         <input
           type="date"
           className="input-field text-sm"
@@ -141,7 +141,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Vencendo em (dias)</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Vencendo em (dias)</label>
         <input
           type="number"
           min={1}
@@ -154,7 +154,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
       {showDateRange && (
         <>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Período de</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Período de</label>
             <input
               type="date"
               className="input-field text-sm"
@@ -163,7 +163,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Período até</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Período até</label>
             <input
               type="date"
               className="input-field text-sm"

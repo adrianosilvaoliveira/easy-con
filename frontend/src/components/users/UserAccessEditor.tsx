@@ -84,7 +84,7 @@ export function UserAccessEditor({
   return (
     <div className="space-y-4 sm:col-span-2">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-900">Nível de acesso *</label>
+        <label className="form-label">Nível de acesso *</label>
         <select
           className="input-field"
           value={roleName}
@@ -95,7 +95,7 @@ export function UserAccessEditor({
           <option value="ADMINISTRADOR">{getRoleLabel('ADMINISTRADOR')}</option>
         </select>
         {isAdmin && (
-          <p className="mt-1 text-xs text-slate-500">Administrador possui acesso total ao sistema.</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Administrador possui acesso total ao sistema.</p>
         )}
       </div>
 
@@ -110,7 +110,7 @@ export function UserAccessEditor({
                 'rounded-lg px-3 py-2 text-sm font-medium transition',
                 !useCustomAccess
                   ? 'bg-primary-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
               )}
             >
               Perfil padrão ({getRoleLabel('OPERACIONAL')})
@@ -128,7 +128,7 @@ export function UserAccessEditor({
                 'rounded-lg px-3 py-2 text-sm font-medium transition',
                 useCustomAccess
                   ? 'bg-primary-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
               )}
             >
               Personalizado
@@ -136,14 +136,14 @@ export function UserAccessEditor({
           </div>
 
           {useCustomAccess && (
-            <div className="rounded-xl border border-surface-border bg-slate-50/80 p-4">
+            <div className="rounded-xl border border-surface-border bg-slate-50/80 p-4 dark:border-slate-600 dark:bg-slate-900/50">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium text-slate-800">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                   Permissões ({selectedCount} selecionadas)
                 </p>
                 <button
                   type="button"
-                  className="text-xs font-medium text-primary-600 hover:underline"
+                  className="text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
                   onClick={applyOperacionalDefaults}
                   disabled={disabled}
                 >
@@ -159,7 +159,7 @@ export function UserAccessEditor({
                   const isOpen = expandedModules.has(mod.module);
 
                   return (
-                    <div key={mod.module} className="rounded-lg border border-surface-border bg-white">
+                    <div key={mod.module} className="rounded-lg border border-surface-border bg-white dark:border-slate-600 dark:bg-slate-800">
                       <div className="flex items-center gap-2 px-3 py-2">
                         <input
                           type="checkbox"
@@ -173,7 +173,7 @@ export function UserAccessEditor({
                         />
                         <button
                           type="button"
-                          className="flex flex-1 items-center justify-between text-left text-sm font-medium text-slate-800"
+                          className="flex flex-1 items-center justify-between text-left text-sm font-medium text-slate-800 dark:text-slate-200"
                           onClick={() =>
                             setExpandedModules((prev) => {
                               const next = new Set(prev);
@@ -192,7 +192,7 @@ export function UserAccessEditor({
                           {mod.permissions.map((perm) => (
                             <label
                               key={perm.key}
-                              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-slate-600 hover:bg-slate-50"
+                              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
                             >
                               <input
                                 type="checkbox"

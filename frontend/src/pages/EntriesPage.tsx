@@ -185,7 +185,7 @@ export function EntriesPage() {
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium">Tipo</label>
+              <label className="form-label">Tipo</label>
               <select className="input-field" {...register('type')}>
                 <option value="ENTRADA_COMPRA">Compra</option>
                 <option value="ENTRADA_MANUAL">Manual</option>
@@ -208,7 +208,7 @@ export function EntriesPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Destino *</label>
+              <label className="form-label">Destino *</label>
               <select className="input-field" {...register('destinationLocationId')}>
                 <option value="">Selecione...</option>
                 {locations?.map((l: { id: string; name: string }) => (
@@ -238,16 +238,16 @@ export function EntriesPage() {
             <Input label="Observações" className="sm:col-span-2" {...register('notes')} />
           </div>
 
-          <div className="rounded-xl border border-surface-border bg-slate-50/50 p-4">
+          <div className="rounded-xl border border-surface-border bg-slate-50/50 p-4 dark:border-slate-600 dark:bg-slate-900/40">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">Lotes desta entrada</h3>
-                <p className="text-xs text-slate-500">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lotes desta entrada</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Um produto pode entrar em vários lotes com validades diferentes
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-white px-3 py-1 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+                <span className="rounded-lg bg-white px-3 py-1 text-sm font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-600">
                   Total: <strong>{totalQuantity}</strong> un.
                 </span>
                 <Button
@@ -269,7 +269,7 @@ export function EntriesPage() {
               {fields.map((field, index) => (
                 <div
                   key={field.id}
-                  className="rounded-lg border border-white bg-white p-3 shadow-sm"
+                  className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-600 dark:bg-slate-800/80 dark:shadow-none"
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -279,7 +279,7 @@ export function EntriesPage() {
                       <button
                         type="button"
                         onClick={() => remove(index)}
-                        className="rounded p-1 text-red-500 hover:bg-red-50"
+                        className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
                         aria-label="Remover lote"
                       >
                         <Trash2 className="h-4 w-4" />

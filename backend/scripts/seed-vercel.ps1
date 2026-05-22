@@ -20,8 +20,9 @@ Get-Content $envFile | ForEach-Object {
   }
 }
 
-if (-not $env:DATABASE_URL) {
-  Write-Host "DATABASE_URL vazio em .env.vercel" -ForegroundColor Red
+if (-not $env:DATABASE_URL -or $env:DATABASE_URL -match '\.\.\.|^postgres(ql)?://\s*$') {
+  Write-Host "DATABASE_URL invalido em .env.vercel" -ForegroundColor Red
+  Write-Host "Cole a URL completa do painel (Prisma Postgres -> .env.local -> PRISMA_DATABASE_URL)"
   exit 1
 }
 if (-not $env:DIRECT_URL) {

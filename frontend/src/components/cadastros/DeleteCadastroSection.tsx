@@ -23,12 +23,12 @@ export function DeleteCadastroSection({
   onDelete,
 }: DeleteCadastroSectionProps) {
   return (
-    <div className="rounded-lg border border-red-100 bg-red-50/50 p-3 sm:col-span-2">
-      <p className="text-sm font-medium text-slate-800">{title}</p>
+    <div className="rounded-lg border border-red-100 bg-red-50/50 p-3 dark:border-red-900/50 dark:bg-red-950/30 sm:col-span-2">
+      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{title}</p>
       {canDelete ? (
-        <p className="mt-1 text-xs text-slate-600">{okMessage}</p>
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{okMessage}</p>
       ) : (
-        <ul className="mt-1 list-inside list-disc text-xs text-slate-600">
+        <ul className="mt-1 list-inside list-disc text-xs text-slate-600 dark:text-slate-400">
           {(checking ? ['Verificando...'] : reasons).map((r) => (
             <li key={r}>{r}</li>
           ))}

@@ -133,7 +133,7 @@ export function SupplierSearchSelect({
   return (
     <>
       <div ref={containerRef} className="relative">
-        <label className="mb-1 block text-sm font-medium text-slate-700">
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
           {label}
           {required && <span className="text-red-500"> *</span>}
         </label>
@@ -166,7 +166,7 @@ export function SupplierSearchSelect({
               <button
                 type="button"
                 onClick={handleClear}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                 aria-label="Limpar fornecedor"
               >
                 <X className="h-4 w-4" />
@@ -178,7 +178,7 @@ export function SupplierSearchSelect({
               type="button"
               disabled={disabled}
               onClick={() => setModalOpen(true)}
-              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-primary-200 bg-primary-50 text-primary-600 transition hover:bg-primary-100"
+              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-primary-200 bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
               title="Cadastrar novo fornecedor"
             >
               <Plus className="h-5 w-5" />
@@ -188,12 +188,12 @@ export function SupplierSearchSelect({
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
 
         {open && !disabled && (
-          <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-surface-border bg-white py-1 shadow-elevated">
+          <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-surface-border bg-white py-1 shadow-elevated dark:border-slate-600 dark:bg-slate-800">
             {allowClear && !query.trim() && (
               <li>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50"
+                  className="w-full px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-700"
                   onClick={handleClear}
                 >
                   Nenhum fornecedor
@@ -201,14 +201,14 @@ export function SupplierSearchSelect({
               </li>
             )}
             {ranked.length === 0 ? (
-              <li className="px-3 py-3 text-center text-sm text-slate-500">
+              <li className="px-3 py-3 text-center text-sm text-slate-500 dark:text-slate-400">
                 {query.trim() ? (
                   <>
                     Nenhum fornecedor encontrado
                     {allowCreate && (
                       <button
                         type="button"
-                        className="mt-2 block w-full text-primary-600 hover:underline"
+                        className="mt-2 block w-full text-primary-600 hover:underline dark:text-primary-400"
                         onClick={() => {
                           setOpen(false);
                           setModalOpen(true);
@@ -228,14 +228,14 @@ export function SupplierSearchSelect({
                   <button
                     type="button"
                     className={cn(
-                      'flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-primary-50',
-                      value === s.id && 'bg-primary-50 text-primary-800'
+                      'flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-primary-50 dark:hover:bg-slate-700',
+                      value === s.id && 'bg-primary-50 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
                     )}
                     onClick={() => handleSelect(s)}
                   >
-                    <span className="font-medium text-slate-900">{s.name}</span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">{s.name}</span>
                     {(s.cnpj || s.email) && (
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
                         {[s.cnpj, s.email].filter(Boolean).join(' · ')}
                       </span>
                     )}

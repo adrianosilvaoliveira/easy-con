@@ -62,7 +62,7 @@ export function LoginPage() {
           className="absolute inset-0 h-full w-full object-contain object-center bg-[#0D47A1]"
         />
       </div>
-      <div className="flex flex-1 items-center justify-center p-4 sm:p-8">
+      <div className="flex flex-1 items-center justify-center bg-white p-4 sm:p-8 dark:bg-slate-900">
         <div className="w-full max-w-md">
           <div className="mb-8">
             <img
@@ -70,8 +70,8 @@ export function LoginPage() {
               alt="Logo"
               className="mb-6 h-12 w-auto object-contain object-left lg:hidden"
             />
-            <h2 className="text-2xl font-bold text-slate-900">Entrar no sistema</h2>
-            <p className="text-slate-500">Acesse com suas credenciais</p>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Entrar no sistema</h2>
+            <p className="text-slate-500 dark:text-slate-400">Acesse com suas credenciais</p>
           </div>
           <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
             <Input label="E-mail" type="email" error={errors.email?.message} {...register('email')} />

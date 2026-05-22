@@ -18,9 +18,9 @@ export default {
           900: '#1e3a8a',
         },
         surface: {
-          DEFAULT: '#ffffff',
-          muted: '#e2e8f0',
-          border: '#cbd5e1',
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          muted: 'rgb(var(--color-surface-muted) / <alpha-value>)',
+          border: 'rgb(var(--color-surface-border) / <alpha-value>)',
         },
       },
       fontFamily: {

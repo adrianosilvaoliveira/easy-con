@@ -6,11 +6,11 @@ interface ActiveToggleFieldProps {
 
 export function ActiveToggleField({ active, onChange, disabled }: ActiveToggleFieldProps) {
   return (
-    <div className="rounded-lg border border-surface-border bg-slate-50 px-4 py-3 sm:col-span-2">
+    <div className="rounded-lg border border-surface-border bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-900/50 sm:col-span-2">
       <label className="flex cursor-pointer items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-900">Status do cadastro</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Status do cadastro</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Inativos não aparecem em buscas e seleções operacionais
           </p>
         </div>
@@ -25,7 +25,7 @@ export function ActiveToggleField({ active, onChange, disabled }: ActiveToggleFi
             disabled={disabled}
             onClick={() => onChange(!active)}
             className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-              active ? 'bg-emerald-500' : 'bg-slate-300'
+              active ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
             } ${disabled ? 'opacity-50' : ''}`}
           >
             <span

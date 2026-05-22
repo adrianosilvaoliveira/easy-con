@@ -146,7 +146,7 @@ export function ProductFormModal({
           <Input label="Código Interno *" error={errors.internalCode?.message} {...register('internalCode')} />
           <Input label="Código de Barras" {...register('barcode')} />
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Categoria *</label>
+            <label className="form-label">Categoria *</label>
             <select className="input-field" {...register('categoryId')}>
               <option value="">Selecione...</option>
               {categories?.map((c: { id: string; name: string }) => (

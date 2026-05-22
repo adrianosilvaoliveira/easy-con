@@ -11,7 +11,7 @@ export function IncludeInactiveFilter({
 }: IncludeInactiveFilterProps) {
   return (
     <label
-      className={`flex cursor-pointer items-center gap-2 rounded-lg border border-surface-border bg-white px-3 py-2 text-sm text-slate-700 ${className}`}
+      className={`flex cursor-pointer items-center gap-2 rounded-lg border border-surface-border bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 ${className}`}
     >
       <input
         type="checkbox"

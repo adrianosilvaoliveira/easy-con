@@ -74,15 +74,15 @@ export function DataTable<T extends { id: string }>({
               onClick={() => onRowClick?.(item)}
               className={cn(
                 'border-b border-surface-border transition',
-                i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30',
-                onRowClick && 'cursor-pointer hover:bg-primary-50/30'
+                i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/30 dark:bg-slate-800/50',
+                onRowClick && 'cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/30'
               )}
             >
               {columns.map((col) => (
                 <td
                   key={col.key}
                   className={cn(
-                    'whitespace-nowrap px-3 py-2.5 text-slate-700 sm:px-4 sm:py-3',
+                    'whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200 sm:px-4 sm:py-3',
                     col.hideBelow && hideClasses[col.hideBelow],
                     col.className
                   )}

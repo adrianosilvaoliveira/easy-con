@@ -30,7 +30,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import type { DashboardMetrics, EntriesExitsChartData, StockMovement } from '@/types';
 import { ChartPeriodFilter, type ChartPeriod } from '@/components/dashboard/ChartPeriodFilter';
 import { formatDate, formatDateTime, movementTypeLabel } from '@/utils/format';
-import { CHART_AXIS_TICK, CHART_GRID_STROKE } from '@/constants/chartTheme';
+import { useChartTheme } from '@/constants/chartTheme';
 
 function KpiCard({
   title,
@@ -59,7 +59,15 @@ function KpiCard({
   );
 }
 
+const chartTooltipStyle = (chart: ReturnType<typeof useChartTheme>) => ({
+  backgroundColor: chart.tooltipBg,
+  borderColor: chart.tooltipBorder,
+  color: chart.tooltipColor,
+  fontSize: 12,
+});
+
 export function DashboardPage() {
+  const chart = useChartTheme();
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
 
   const { data, isLoading } = useQuery({
@@ -152,7 +160,7 @@ export function DashboardPage() {
               title="Perda Financeira"
               value={`R$ ${Number(expMetrics.financialLoss).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
-              color="bg-slate-100 text-slate-700"
+              color="bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
               subtitle="Lotes vencidos"
             />
           </div>
@@ -166,10 +174,10 @@ export function DashboardPage() {
                 {({ width, height }) => (
                   <ResponsiveContainer width={width} height={height}>
                     <BarChart data={expMetrics.expiringByMonth}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-                      <XAxis dataKey="month" tick={CHART_AXIS_TICK} tickFormatter={(v) => v.slice(5)} />
-                      <YAxis tick={CHART_AXIS_TICK} width={36} />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.gridStroke} />
+                      <XAxis dataKey="month" tick={chart.axisTick} tickFormatter={(v) => v.slice(5)} />
+                      <YAxis tick={chart.axisTick} width={36} />
+                      <Tooltip contentStyle={chartTooltipStyle(chart)} />
                       <Bar dataKey="count" name="Qtd" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -183,9 +191,9 @@ export function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-300 bg-red-100 dark:border-slate-600 dark:bg-red-950/40">
-                      <th className="px-3 py-2 text-left font-semibold text-slate-800">Produto</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-800">Lote</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-800">Validade</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-800 dark:text-slate-200">Produto</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-800 dark:text-slate-200">Lote</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-800 dark:text-slate-200">Validade</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -196,7 +204,7 @@ export function DashboardPage() {
                       status: ExpirationStatusType;
                       product: { name: string };
                     }) => (
-                      <tr key={b.id} className="border-b border-slate-200">
+                      <tr key={b.id} className="border-b border-slate-200 dark:border-slate-700">
                         <td className="truncate px-3 py-2 max-w-[120px]">{b.product.name}</td>
                         <td className="px-3 py-2">{b.batchNumber}</td>
                         <td className="px-3 py-2 text-right">
@@ -206,7 +214,7 @@ export function DashboardPage() {
                     ))}
                     {!expMetrics.criticalBatches?.length && (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center font-medium text-slate-600">
+                        <td colSpan={3} className="px-4 py-6 text-center font-medium text-slate-600 dark:text-slate-400">
                           Nenhum lote crítico
                         </td>
                       </tr>
@@ -235,15 +243,15 @@ export function DashboardPage() {
               data={chartResponse?.chartData ?? []}
               margin={{ top: 8, right: 8, left: -8, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chart.gridStroke} />
               <XAxis
                 dataKey="date"
-                tick={CHART_AXIS_TICK}
+                tick={chart.axisTick}
                 interval="preserveStartEnd"
               />
-              <YAxis tick={CHART_AXIS_TICK} width={36} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <YAxis tick={chart.axisTick} width={36} />
+              <Tooltip contentStyle={chartTooltipStyle(chart)} />
+              <Legend wrapperStyle={{ fontSize: 11, color: chart.axisTick.fill }} />
               <Area type="monotone" dataKey="entries" name="Entradas" stroke="#2563eb" fill="#93c5fd" fillOpacity={0.4} />
               <Area type="monotone" dataKey="exits" name="Saídas" stroke="#dc2626" fill="#fca5a5" fillOpacity={0.4} />
             </AreaChart>

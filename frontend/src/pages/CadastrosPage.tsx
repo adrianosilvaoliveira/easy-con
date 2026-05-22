@@ -200,7 +200,7 @@ export function CadastrosPage() {
     <div className="page-content">
       <PageHeader title="Cadastros" />
 
-      <div className="mb-4 flex flex-wrap gap-2 border-b border-surface-border pb-2">
+      <div className="mb-4 flex flex-wrap gap-2 border-b border-surface-border pb-2 dark:border-slate-600">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -209,7 +209,7 @@ export function CadastrosPage() {
             className={`rounded-lg px-4 py-2 text-sm font-medium ${
               tab === t.id
                 ? 'bg-primary-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
           >
             {t.label}
@@ -285,7 +285,7 @@ export function CadastrosPage() {
                 onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
               />
               <div>
-                <label className="mb-1 block text-sm font-medium">Tipo *</label>
+                <label className="form-label">Tipo *</label>
                 <select
                   className="input-field"
                   value={form.type}

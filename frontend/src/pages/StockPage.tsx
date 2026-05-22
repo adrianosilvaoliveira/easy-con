@@ -39,7 +39,7 @@ export function StockPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-primary-600" />
-                    <h3 className="font-semibold text-slate-900">{loc.name}</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">{loc.name}</h3>
                   </div>
                   <p className="mt-1 text-xs text-slate-500 font-mono">{loc.code}</p>
                   <Badge variant="info" className="mt-2">{loc.type.replace(/_/g, ' ')}</Badge>

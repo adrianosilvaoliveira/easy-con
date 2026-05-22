@@ -130,7 +130,7 @@ export function TransfersPage() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Transferência" size="lg">
         <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="block text-sm font-medium mb-1">Produto</label>
+            <label className="form-label">Produto</label>
             <select className="input-field" {...register('productId')}>
               <option value="">Selecione...</option>
               {products?.map((p: { id: string; name: string; internalCode: string }) => (
@@ -139,7 +139,7 @@ export function TransfersPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Origem</label>
+            <label className="form-label">Origem</label>
             <select className="input-field" {...register('originLocationId')}>
               <option value="">Selecione...</option>
               {locations?.map((l: { id: string; name: string }) => (
@@ -148,7 +148,7 @@ export function TransfersPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Destino</label>
+            <label className="form-label">Destino</label>
             <select className="input-field" {...register('destinationLocationId')}>
               <option value="">Selecione...</option>
               {locations?.map((l: { id: string; name: string }) => (

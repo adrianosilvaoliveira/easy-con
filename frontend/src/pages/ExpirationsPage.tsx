@@ -158,7 +158,7 @@ export function ExpirationsPage() {
           </div>
           <div className="card p-4 sm:col-span-2 lg:col-span-2">
             <p className="text-xs text-slate-500">Perda financeira (vencidos)</p>
-            <p className="text-xl font-bold text-slate-900">
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
                 metrics.financialLoss || 0
               )}
@@ -174,7 +174,7 @@ export function ExpirationsPage() {
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                tab === t ? 'bg-primary-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                tab === t ? 'bg-primary-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600'
               }`}
             >
               {t === 'all' ? 'Todos' : t === 'expiring' ? 'Vencendo' : 'Vencidos'}
@@ -265,7 +265,7 @@ export function ExpirationsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Local</label>
+            <label className="form-label">Local</label>
             <select className="input-field" {...register('stockLocationId')}>
               <option value="">Selecione...</option>
               {locations?.map((l: { id: string; name: string }) => (
