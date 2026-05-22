@@ -12,6 +12,7 @@ import {
   validateExpirationDate,
 } from '../../shared/utils/expiration';
 import { AuditService } from '../../services/AuditService';
+import { AlertService } from './AlertService';
 import { z } from 'zod';
 import { createBatchSchema, updateBatchSchema } from './batches.dto';
 
@@ -303,7 +304,7 @@ export class BatchService {
       prisma.productBatch.count({ where: { status: 'CRITICAL', quantity: { gt: 0 } } }),
       prisma.productBatch.count({ where: { status: 'WARNING', quantity: { gt: 0 } } }),
       prisma.productBatch.count({ where: { status: 'VALID', quantity: { gt: 0 } } }),
-      prisma.expirationAlert.count({ where: { visualized: false } }),
+      AlertService.countActive(),
       prisma.productBatch.findMany({
         where: { quantity: { gt: 0 } },
         select: {

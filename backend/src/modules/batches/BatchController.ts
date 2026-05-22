@@ -60,6 +60,13 @@ export class BatchController {
     res.json({ success: true, data: result });
   }
 
+  static async snoozeAlert(req: Request, res: Response): Promise<void> {
+    const preset = (req.body?.preset as string) || '1d';
+    const until = AlertService.snoozeUntilFromPreset(preset);
+    const result = await AlertService.snooze(getParam(req, 'id'), until);
+    res.json({ success: true, data: result });
+  }
+
   static async markAllAlertsRead(_req: Request, res: Response): Promise<void> {
     const result = await AlertService.markAllVisualized();
     res.json({ success: true, data: result });

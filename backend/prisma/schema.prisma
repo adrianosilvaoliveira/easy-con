@@ -257,17 +257,21 @@ model ProductBatch {
 }
 
 model ExpirationAlert {
-  id         String              @id @default(uuid())
-  batchId    String              @map("batch_id")
-  batch      ProductBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  alertType  ExpirationAlertType @map("alert_type")
-  alertDate  DateTime            @default(now()) @map("alert_date")
-  visualized Boolean             @default(false)
-  createdAt  DateTime            @default(now())
+  id            String              @id @default(uuid())
+  batchId       String              @map("batch_id")
+  batch         ProductBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  alertType     ExpirationAlertType @map("alert_type")
+  alertDate     DateTime            @default(now()) @map("alert_date")
+  visualized    Boolean             @default(false)
+  visualizedAt  DateTime?           @map("visualized_at")
+  snoozedUntil  DateTime?           @map("snoozed_until")
+  createdAt     DateTime            @default(now())
 
   @@unique([batchId, alertType])
   @@index([visualized])
   @@index([alertDate])
+  @@index([visualizedAt])
+  @@index([snoozedUntil])
   @@map("expiration_alerts")
 }
 

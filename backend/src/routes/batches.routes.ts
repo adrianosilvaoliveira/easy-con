@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { BatchController } from '../modules/batches/BatchController';
 import { authenticate, authorize } from '../middlewares/auth';
 import { validate } from '../middlewares/validate';
-import { createBatchSchema, updateBatchSchema } from '../modules/batches/batches.dto';
+import {
+  createBatchSchema,
+  updateBatchSchema,
+  snoozeAlertSchema,
+} from '../modules/batches/batches.dto';
 import { auditAction } from '../middlewares/audit';
 
 const batchesRoutes = Router();
@@ -16,6 +20,12 @@ batchesRoutes.get('/alerts/count', authorize('batches:READ'), BatchController.al
 batchesRoutes.get('/alerts', authorize('batches:READ'), BatchController.listAlerts);
 batchesRoutes.patch('/alerts/read-all', authorize('batches:UPDATE'), BatchController.markAllAlertsRead);
 batchesRoutes.patch('/alerts/:id/read', authorize('batches:UPDATE'), BatchController.markAlertRead);
+batchesRoutes.patch(
+  '/alerts/:id/snooze',
+  authorize('batches:UPDATE'),
+  validate(snoozeAlertSchema),
+  BatchController.snoozeAlert
+);
 batchesRoutes.get('/', authorize('batches:READ'), BatchController.list);
 batchesRoutes.get('/:id', authorize('batches:READ'), BatchController.findById);
 batchesRoutes.post(

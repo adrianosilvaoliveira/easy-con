@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ExpirationAlertsModal } from '@/components/alerts/ExpirationAlertsModal';
+import { cn } from '@/utils/cn';
 import { useQuery } from '@tanstack/react-query';
 import {
   Package,
@@ -38,15 +40,26 @@ function KpiCard({
   icon: Icon,
   color,
   subtitle,
+  onClick,
+  alertActive,
 }: {
   title: string;
   value: number | string;
   icon: React.ElementType;
   color: string;
   subtitle?: string;
+  onClick?: () => void;
+  /** Pulso discreto quando há alertas ativos (sem mudar layout do card) */
+  alertActive?: boolean;
 }) {
-  return (
-    <div className="card flex items-start justify-between gap-3">
+  const className = cn(
+    'card flex w-full items-start justify-between gap-3 text-left transition',
+    onClick && 'cursor-pointer hover:border-primary-300 hover:shadow-card dark:hover:border-primary-700',
+    alertActive && 'ring-2 ring-violet-500/70 ring-offset-2 ring-offset-white dark:ring-offset-slate-800 animate-pulse'
+  );
+
+  const content = (
+    <>
       <div className="min-w-0">
         <p className="text-xs font-semibold text-slate-600 sm:text-sm dark:text-slate-300">{title}</p>
         <p className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">{value}</p>
@@ -55,8 +68,18 @@ function KpiCard({
       <div className={`shrink-0 rounded-xl p-2.5 sm:p-3 ${color}`}>
         <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className} aria-label={`${title}: abrir detalhes`}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 const chartTooltipStyle = (chart: ReturnType<typeof useChartTheme>) => ({
@@ -69,6 +92,7 @@ const chartTooltipStyle = (chart: ReturnType<typeof useChartTheme>) => ({
 export function DashboardPage() {
   const chart = useChartTheme();
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -89,6 +113,8 @@ export function DashboardPage() {
     queryKey: ['batches-dashboard'],
     queryFn: () => api.get('/batches/dashboard').then((r) => r.data.data),
   });
+
+  const pendingAlertsCount = expMetrics?.counts?.alertsCount ?? 0;
 
   if (isLoading) {
     return (
@@ -152,9 +178,11 @@ export function DashboardPage() {
             />
             <KpiCard
               title="Alertas Pendentes"
-              value={expMetrics.counts.alertsCount}
+              value={pendingAlertsCount}
               icon={Clock}
               color="bg-violet-50 text-violet-600"
+              onClick={() => setAlertsModalOpen(true)}
+              alertActive={pendingAlertsCount > 0}
             />
             <KpiCard
               title="Perda Financeira"
@@ -357,6 +385,7 @@ export function DashboardPage() {
           emptyTitle="Sem movimentações recentes"
         />
       </div>
+      <ExpirationAlertsModal open={alertsModalOpen} onClose={() => setAlertsModalOpen(false)} />
     </div>
   );
 }

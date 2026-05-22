@@ -30,6 +30,18 @@ export const listBatchesSchema = z.object({
   includeInactive: z.string().optional(),
 });
 
+export const snoozeAlertSchema = z.object({
+  preset: z.enum(['4h', '1d', '3d', '7d']).default('1d'),
+});
+
+export const listAlertsSchema = z.object({
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  status: z.enum(['active', 'history', 'snoozed']).optional(),
+  search: z.string().optional(),
+  visualized: z.enum(['true', 'false']).optional(),
+});
+
 export const reportFiltersSchema = z.object({
   productId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
