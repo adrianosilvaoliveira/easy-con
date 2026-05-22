@@ -100,22 +100,31 @@ export function StockPage() {
       )}
 
       <div className="card space-y-4 !p-4 sm:!p-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="relative sm:col-span-2 lg:col-span-2">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar produto, código ou barras..."
-              className="input-field w-full pl-9"
-            />
+        <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="sm:col-span-2 lg:col-span-2">
+            <label className="form-label" htmlFor="stock-search">
+              Buscar
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="stock-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Produto, código ou barras..."
+                className="input-field w-full pl-9"
+              />
+            </div>
           </div>
           <div>
-            <label className="form-label">Local</label>
+            <label className="form-label" htmlFor="stock-location">
+              Local
+            </label>
             <select
+              id="stock-location"
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
-              className="input-field"
+              className="input-field w-full"
             >
               <option value="">Todos os locais</option>
               {locations?.map((loc) => (
@@ -126,8 +135,11 @@ export function StockPage() {
             </select>
           </div>
           <div>
-            <label className="form-label">Lote</label>
+            <label className="form-label" htmlFor="stock-batch">
+              Lote
+            </label>
             <input
+              id="stock-batch"
               value={batch}
               onChange={(e) => setBatch(e.target.value)}
               placeholder="Nº do lote..."
