@@ -12,7 +12,7 @@ import { ExpirationBadge, ExpirationStatusType } from '@/components/expiration/E
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { formatDate } from '@/utils/format';
+import { formatDate, formatProductName } from '@/utils/format';
 import { useAuthStore } from '@/stores/authStore';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
@@ -223,7 +223,7 @@ export function ExpirationsPage() {
         columns={[
           { key: 'product', header: 'Produto', render: (b) => (
             <div>
-              <p className="font-medium">{b.product.name}</p>
+              <p className="font-medium">{formatProductName(b.product.name)}</p>
               <p className="text-xs text-slate-500">{b.product.internalCode}</p>
             </div>
           )},
@@ -319,7 +319,7 @@ function BatchEditModal({
   return (
     <Modal open onClose={onClose} title="Editar Lote" size="lg">
       <p className="mb-4 text-sm text-slate-600">
-        {batch.product.name} · {batch.stockLocation.name}
+        {formatProductName(batch.product.name)} · {batch.stockLocation.name}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="Nº do Lote" value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} />

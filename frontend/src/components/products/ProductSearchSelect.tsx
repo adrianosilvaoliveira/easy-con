@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, X, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { formatProductName } from '@/utils/format';
 import api from '@/services/api';
 import { ProductFormModal, type CreatedProduct } from './ProductFormModal';
 
@@ -104,7 +105,7 @@ export function ProductSearchSelect({
 
   const handleSelect = (product: ProductOption) => {
     setSelected(product);
-    setQuery(`${product.internalCode} — ${product.name}`);
+    setQuery(`${product.internalCode} — ${formatProductName(product.name)}`);
     onChange(product.id, product);
     setOpen(false);
   };
@@ -217,7 +218,7 @@ export function ProductSearchSelect({
                     )}
                     onClick={() => handleSelect(p)}
                   >
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{p.name}</span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">{formatProductName(p.name)}</span>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       {p.internalCode}
                       {p.barcode ? ` · ${p.barcode}` : ''}

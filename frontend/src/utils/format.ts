@@ -18,6 +18,10 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+export function formatProductName(name: string): string {
+  return name.trim().toLocaleUpperCase('pt-BR');
+}
+
 export function movementTypeLabel(type: string): string {
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
 }

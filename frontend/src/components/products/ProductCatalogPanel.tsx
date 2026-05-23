@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ProductFormModal } from '@/components/products/ProductFormModal';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { useAuthStore } from '@/stores/authStore';
+import { formatProductName } from '@/utils/format';
 import type { Product, PaginatedResponse } from '@/types';
 
 interface ProductCatalogPanelProps {
@@ -84,7 +85,7 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
             header: 'Código',
             render: (p) => <span className="font-mono text-xs">{p.internalCode}</span>,
           },
-          { key: 'name', header: 'Nome', render: (p) => p.name },
+          { key: 'name', header: 'Nome', render: (p) => formatProductName(p.name) },
           { key: 'category', header: 'Categoria', render: (p) => p.category.name },
           { key: 'stock', header: 'Estoque', render: (p) => p.totalStock ?? 0 },
           {

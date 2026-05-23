@@ -10,6 +10,7 @@ import { ProductFormModal } from '@/components/products/ProductFormModal';
 import type { StockLocation, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
+import { formatProductName } from '@/utils/format';
 import { useAuthStore } from '@/stores/authStore';
 
 export function StockPage() {
@@ -264,7 +265,7 @@ export function StockPage() {
         emptyTitle="Nenhum item encontrado"
         emptyDescription="Ajuste os filtros ou cadastre entradas de estoque."
         columns={[
-          { key: 'product', header: 'Produto', render: (i) => i.product.name },
+          { key: 'product', header: 'Produto', render: (i) => formatProductName(i.product.name) },
           { key: 'code', header: 'Código', render: (i) => i.product.internalCode },
           { key: 'location', header: 'Local', render: (i) => i.location.name },
           { key: 'lot', header: 'Lote', render: (i) => i.batch?.batchNumber || '-' },

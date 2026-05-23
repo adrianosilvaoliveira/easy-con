@@ -14,7 +14,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
-import { formatDateTime, movementTypeLabel } from '@/utils/format';
+import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 
 const exitSchema = z.object({
   type: z.enum(['SAIDA_CONSUMO', 'SAIDA_CIRURGIA', 'SAIDA_CONSULTA', 'SAIDA_PERDA', 'SAIDA_VENCIMENTO']),
@@ -85,7 +85,7 @@ export function ExitsPage() {
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
           { key: 'type', header: 'Tipo', render: (m) => <Badge variant="warning">{movementTypeLabel(m.type)}</Badge> },
-          { key: 'product', header: 'Produto', render: (m) => m.product.name },
+          { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name || '-' },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },

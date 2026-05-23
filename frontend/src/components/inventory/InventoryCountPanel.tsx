@@ -6,7 +6,7 @@ import api from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/utils/cn';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatProductName } from '@/utils/format';
 import { fuzzyScore } from '@/utils/search';
 
 interface CatalogProduct {
@@ -154,7 +154,7 @@ export function InventoryCountPanel({ inventoryId, onBack, onCompleted }: Invent
   const handleAddProduct = async (product: CatalogProduct) => {
     try {
       await updateItem.mutateAsync({ productId: product.id, countedQuantity: 0 });
-      toast.success(`${product.name} adicionado à contagem`);
+      toast.success(`${formatProductName(product.name)} adicionado à contagem`);
     } catch {
       /* toast no updateItem */
     }
@@ -373,7 +373,7 @@ function CountRow({
       )}
     >
       <td className="px-3 py-2 sm:px-4">
-        <p className="font-medium text-slate-900 dark:text-slate-100">{item.product.name}</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">{formatProductName(item.product.name)}</p>
         <p className="text-xs text-slate-500 font-mono">{item.product.internalCode}</p>
       </td>
       <td className="px-3 py-2 text-right font-medium tabular-nums sm:px-4">{item.systemQuantity}</td>
@@ -398,7 +398,7 @@ function CountRow({
               'input-field w-24 text-right tabular-nums',
               saving && 'opacity-60'
             )}
-            aria-label={`Quantidade contada de ${item.product.name}`}
+            aria-label={`Quantidade contada de ${formatProductName(item.product.name)}`}
           />
         )}
       </td>

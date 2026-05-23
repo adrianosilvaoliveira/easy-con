@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { calculateExpirationStatus } from '../src/shared/utils/expiration';
+import { normalizeProductName } from '../src/shared/utils/productName';
 import type { ContratoProductRow } from './parse-contrato-pdf';
 
 const prisma = new PrismaClient();
@@ -148,10 +149,12 @@ async function main() {
           const minQuantity = Math.max(0, Math.floor(row.stock * 0.1));
           const isNew = !existingCodes.has(internalCode);
 
+          const productName = normalizeProductName(row.name);
+
           const product = await tx.product.upsert({
             where: { internalCode },
             update: {
-              name: row.name,
+              name: productName,
               manufacturer,
               categoryId,
               unit: 'UN',
@@ -160,7 +163,7 @@ async function main() {
               notes: 'Importado do Contrato.pdf (CDO Monticuco)',
             },
             create: {
-              name: row.name,
+              name: productName,
               internalCode,
               categoryId,
               manufacturer,

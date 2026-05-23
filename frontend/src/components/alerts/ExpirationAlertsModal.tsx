@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ExpirationBadge, ExpirationStatusType } from '@/components/expiration/ExpirationBadge';
 import { EXPIRATION_ALERT_LABELS, SNOOZE_PRESETS } from '@/constants/expirationAlertLabels';
 import { useAuthStore } from '@/stores/authStore';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatProductName } from '@/utils/format';
 import { cn } from '@/utils/cn';
 
 export interface ExpirationAlertRecord {
@@ -184,7 +184,7 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-900 dark:text-slate-100">{a.batch.product.name}</p>
+                        <p className="font-medium text-slate-900 dark:text-slate-100">{formatProductName(a.batch.product.name)}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Lote {a.batch.batchNumber} · {a.batch.stockLocation.name}
                         </p>
@@ -260,7 +260,7 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-800 dark:text-slate-200">{a.batch.product.name}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{formatProductName(a.batch.product.name)}</p>
                         <p className="text-xs text-slate-500">
                           Lote {a.batch.batchNumber} · {EXPIRATION_ALERT_LABELS[a.alertType] ?? a.alertType}
                         </p>

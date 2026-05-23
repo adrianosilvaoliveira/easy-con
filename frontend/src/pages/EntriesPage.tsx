@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { SupplierSearchSelect } from '@/components/suppliers/SupplierSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
-import { formatDateTime, movementTypeLabel } from '@/utils/format';
+import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 
 const batchLineSchema = z.object({
   batchNumber: z.string().min(1, 'Lote obrigatório'),
@@ -168,7 +168,7 @@ export function EntriesPage() {
             header: 'Tipo',
             render: (m) => <Badge variant="success">{movementTypeLabel(m.type)}</Badge>,
           },
-          { key: 'product', header: 'Produto', render: (m) => m.product.name },
+          { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
           {
             key: 'lot',
             header: 'Lote',

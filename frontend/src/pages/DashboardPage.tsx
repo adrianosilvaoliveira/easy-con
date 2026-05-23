@@ -31,7 +31,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
 import type { DashboardMetrics, EntriesExitsChartData, StockMovement } from '@/types';
 import { ChartPeriodFilter, type ChartPeriod } from '@/components/dashboard/ChartPeriodFilter';
-import { formatDate, formatDateTime, movementTypeLabel } from '@/utils/format';
+import { formatDate, formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import { useChartTheme } from '@/constants/chartTheme';
 
 function KpiCard({
@@ -233,7 +233,7 @@ export function DashboardPage() {
                       product: { name: string };
                     }) => (
                       <tr key={b.id} className="border-b border-slate-200 dark:border-slate-700">
-                        <td className="truncate px-3 py-2 max-w-[120px]">{b.product.name}</td>
+                        <td className="truncate px-3 py-2 max-w-[120px]">{formatProductName(b.product.name)}</td>
                         <td className="px-3 py-2">{b.batchNumber}</td>
                         <td className="px-3 py-2 text-right">
                           <ExpirationBadge status={b.status} />
@@ -350,7 +350,7 @@ export function DashboardPage() {
               <tbody>
                 {metrics.expiring.slice(0, 5).map((b) => (
                   <tr key={b.id} className="border-b border-slate-200">
-                    <td className="max-w-[140px] truncate px-3 py-2 sm:max-w-none sm:px-4">{b.product.name}</td>
+                    <td className="max-w-[140px] truncate px-3 py-2 sm:max-w-none sm:px-4">{formatProductName(b.product.name)}</td>
                     <td className="hidden px-3 py-2 sm:table-cell sm:px-4">{b.batchNumber}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right sm:px-4">{formatDate(b.expirationDate)}</td>
                   </tr>
@@ -376,7 +376,7 @@ export function DashboardPage() {
           columns={[
             { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
             { key: 'type', header: 'Tipo', render: (m) => <Badge variant="info">{movementTypeLabel(m.type)}</Badge>, hideBelow: 'md' },
-            { key: 'product', header: 'Produto', render: (m) => <span className="max-w-[120px] truncate sm:max-w-none">{m.product.name}</span> },
+            { key: 'product', header: 'Produto', render: (m) => <span className="max-w-[120px] truncate sm:max-w-none">{formatProductName(m.product.name)}</span> },
             { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
             { key: 'user', header: 'Usuário', render: (m) => m.user.name, hideBelow: 'lg' },
           ]}

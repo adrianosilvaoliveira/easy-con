@@ -1,7 +1,14 @@
 import { z } from 'zod';
+import { normalizeProductName } from '../../shared/utils/productName';
+
+const productNameSchema = z
+  .string()
+  .min(2)
+  .max(200)
+  .transform(normalizeProductName);
 
 export const createProductSchema = z.object({
-  name: z.string().min(2).max(200),
+  name: productNameSchema,
   internalCode: z.string().min(1).max(50),
   barcode: z.string().optional(),
   categoryId: z.string().uuid(),

@@ -18,6 +18,7 @@
     "prisma:clear-data": "tsx scripts/clear-data-except-users.ts",
     "import:contrato-parse": "tsx scripts/parse-contrato-pdf.ts",
     "import:contrato": "tsx scripts/import-contrato-products.ts",
+    "prisma:uppercase-products": "tsx scripts/uppercase-product-names.ts",
     "prisma:studio": "prisma studio",
     "lint": "eslint src --ext .ts",
     "test": "vitest run"

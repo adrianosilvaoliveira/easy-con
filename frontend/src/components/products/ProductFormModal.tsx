@@ -9,9 +9,13 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
+import { formatProductName } from '@/utils/format';
 
 export const productSchema = z.object({
-  name: z.string().min(2, 'Nome obrigatório'),
+  name: z
+    .string()
+    .min(2, 'Nome obrigatório')
+    .transform((value) => formatProductName(value)),
   internalCode: z.string().min(1, 'Código obrigatório'),
   barcode: z.string().optional(),
   categoryId: z.string().uuid('Selecione a categoria'),
@@ -76,7 +80,7 @@ export function ProductFormModal({
     if (!open) return;
     if (product && isEdit) {
       reset({
-        name: product.name,
+        name: formatProductName(product.name),
         internalCode: product.internalCode,
         barcode: product.barcode || '',
         categoryId: product.categoryId,

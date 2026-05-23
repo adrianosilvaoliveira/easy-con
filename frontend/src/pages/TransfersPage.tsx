@@ -14,7 +14,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { useAuthStore } from '@/stores/authStore';
 import type { StockMovement, PaginatedResponse } from '@/types';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatProductName } from '@/utils/format';
 
 const transferSchema = z.object({
   type: z.literal('TRANSFERENCIA'),
@@ -98,7 +98,7 @@ export function TransfersPage() {
         emptyIcon={ArrowLeftRight}
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
-          { key: 'product', header: 'Produto', render: (m) => m.product.name },
+          { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name },
           { key: 'dest', header: 'Destino', render: (m) => m.destinationLocation?.name },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
