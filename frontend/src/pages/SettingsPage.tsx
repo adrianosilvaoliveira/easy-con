@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
 import { UsersPage } from '@/pages/UsersPage';
+import { OperationalCadastrosPanel } from '@/components/cadastros/OperationalCadastrosPanel';
 import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SettingsNavItem } from '@/components/settings/SettingsNavItem';
@@ -24,18 +25,19 @@ import type { OrganizationSettings } from '@/types';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
-type SettingsSection = 'gerais' | 'empresa' | 'aparencia' | 'usuarios';
+type SettingsSection = 'gerais' | 'empresa' | 'aparencia' | 'usuarios' | 'cadastros';
 
 const NAV_ITEMS: { id: SettingsSection; label: string; description: string; permission?: string }[] = [
   { id: 'gerais', label: 'Gerais', description: 'Conta e perfil de acesso' },
   { id: 'empresa', label: 'Empresa', description: 'Dados institucionais e relatórios' },
+  { id: 'cadastros', label: 'Fornecedores e locais', description: 'Cadastros operacionais', permission: ROUTE_PERMISSIONS.cadastros },
   { id: 'usuarios', label: 'Usuários', description: 'Contas e permissões de acesso', permission: ROUTE_PERMISSIONS.usuarios },
   { id: 'aparencia', label: 'Aparência', description: 'Tema e visualização' },
 ];
 
 function sectionFromPath(pathname: string): SettingsSection {
   const segment = pathname.replace(/^\/configuracoes\/?/, '').split('/')[0];
-  if (segment === 'empresa' || segment === 'aparencia' || segment === 'usuarios') return segment;
+  if (segment === 'empresa' || segment === 'aparencia' || segment === 'usuarios' || segment === 'cadastros') return segment;
   return 'gerais';
 }
 
@@ -65,8 +67,10 @@ export function SettingsPage() {
 
   const canReadOrg = hasPermission('settings:READ');
   const canReadUsers = hasPermission(ROUTE_PERMISSIONS.usuarios);
+  const canReadCadastros = hasPermission(ROUTE_PERMISSIONS.cadastros);
   const visibleNav = NAV_ITEMS.filter((item) => {
     if (item.id === 'empresa' && !canReadOrg) return false;
+    if (item.id === 'cadastros' && !canReadCadastros) return false;
     if (item.id === 'usuarios' && !canReadUsers) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
     return true;
@@ -83,9 +87,17 @@ export function SettingsPage() {
     if (activeSection === 'empresa' && !canReadOrg) {
       navigate('/configuracoes/gerais', { replace: true });
     }
-  }, [location.pathname, activeSection, canReadUsers, canReadOrg, navigate]);
+    if (activeSection === 'cadastros' && !canReadCadastros) {
+      navigate('/configuracoes/gerais', { replace: true });
+    }
+  }, [location.pathname, activeSection, canReadUsers, canReadOrg, canReadCadastros, navigate]);
 
-  const pageTitle = activeSection === 'usuarios' ? 'Usuários' : 'Configurações';
+  const pageTitle =
+    activeSection === 'usuarios'
+      ? 'Usuários'
+      : activeSection === 'cadastros'
+        ? 'Fornecedores e locais'
+        : 'Configurações';
 
   const { data: organization, isLoading: orgLoading } = useQuery({
     queryKey: ['organization'],
@@ -311,6 +323,16 @@ export function SettingsPage() {
                     )}
                   </form>
                 )}
+              </SettingsGroupPanel>
+            )}
+
+            {activeSection === 'cadastros' && canReadCadastros && (
+              <SettingsGroupPanel
+                groupTitle="Cadastros operacionais"
+                sectionTitle="Fornecedores e locais de estoque"
+                sectionHint="Gerencie fornecedores e locais usados nas movimentações."
+              >
+                <OperationalCadastrosPanel />
               </SettingsGroupPanel>
             )}
 

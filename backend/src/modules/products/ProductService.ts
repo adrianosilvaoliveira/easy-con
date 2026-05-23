@@ -4,6 +4,7 @@ import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagina
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { createProductSchema, updateProductSchema, createBatchSchema } from './products.dto';
+import { normalizeProductName } from '../../shared/utils/productName';
 import { BatchService } from '../batches/BatchService';
 
 type CreateProductDTO = z.infer<typeof createProductSchema>;
@@ -88,16 +89,17 @@ export class ProductService {
     if (exists) throw new ValidationError('Código interno já existe');
 
     return prisma.product.create({
-      data,
+      data: { ...data, name: normalizeProductName(data.name) },
       include: { category: true },
     });
   }
 
   static async update(id: string, data: UpdateProductDTO) {
     await this.findById(id);
+    const normalized = data.name !== undefined ? { ...data, name: normalizeProductName(data.name) } : data;
     return prisma.product.update({
       where: { id },
-      data,
+      data: normalized,
       include: { category: true },
     });
   }

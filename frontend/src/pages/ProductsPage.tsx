@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom';
 
-/** Rota legada — cadastro de produtos em Cadastros */
+/** Rota legada — produtos em Estoque */
 export function ProductsPage() {
-  return <Navigate to="/cadastros?aba=produtos" replace />;
+  return <Navigate to="/estoque" replace />;
 }

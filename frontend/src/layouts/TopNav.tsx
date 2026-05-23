@@ -1,7 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Library,
   Boxes,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -24,7 +23,6 @@ import { UserMenu } from '@/components/layout/UserMenu';
 
 const navItems = [
   { to: '/', label: 'Dashboard', shortLabel: 'Início', icon: LayoutDashboard, permission: ROUTE_PERMISSIONS.dashboard },
-  { to: '/cadastros', label: 'Cadastros', shortLabel: 'Cadast.', icon: Library, permission: ROUTE_PERMISSIONS.cadastros },
   { to: '/estoque', label: 'Estoque', shortLabel: 'Estoque', icon: Boxes, permission: ROUTE_PERMISSIONS.estoque },
   { to: '/entradas', label: 'Entradas', shortLabel: 'Entradas', icon: ArrowDownToLine, permission: ROUTE_PERMISSIONS.entradas },
   { to: '/saidas', label: 'Saídas', shortLabel: 'Saídas', icon: ArrowUpFromLine, permission: ROUTE_PERMISSIONS.saidas },
