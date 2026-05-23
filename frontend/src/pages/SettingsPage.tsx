@@ -330,7 +330,7 @@ export function SettingsPage() {
               <SettingsGroupPanel
                 groupTitle="Cadastros operacionais"
                 sectionTitle="Fornecedores e locais de estoque"
-                sectionHint="Gerencie fornecedores e locais usados nas movimentações."
+                sectionHint="Gerencie fornecedores, locais de estoque e categorias de produtos."
               >
                 <OperationalCadastrosPanel />
               </SettingsGroupPanel>

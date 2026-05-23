@@ -13,12 +13,13 @@ import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { useAuthStore } from '@/stores/authStore';
 import { DeleteCadastroSection } from '@/components/cadastros/DeleteCadastroSection';
 
-type Tab = 'suppliers' | 'locations';
+type Tab = 'suppliers' | 'locations' | 'categories';
 
 interface ActiveEntity {
   id: string;
   name: string;
   active: boolean;
+  _count?: { products?: number };
 }
 
 interface DeleteCheck {
@@ -29,6 +30,7 @@ interface DeleteCheck {
 export function OperationalCadastrosPanel() {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canDeleteLocation = hasPermission('stock:DELETE');
+  const canDeleteCategory = hasPermission('products:DELETE');
   const [tab, setTab] = useState<Tab>('suppliers');
   const [search, setSearch] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
@@ -41,12 +43,21 @@ export function OperationalCadastrosPanel() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'suppliers', label: 'Fornecedores' },
     { id: 'locations', label: 'Locais de Estoque' },
+    { id: 'categories', label: 'Categorias de Produtos' },
   ];
 
-  const endpoint = tab === 'suppliers' ? '/suppliers' : '/stock/locations';
+  const endpoint =
+    tab === 'suppliers'
+      ? '/suppliers'
+      : tab === 'locations'
+        ? '/stock/locations'
+        : '/products/categories';
 
   const editingLocationId =
     tab === 'locations' && editing?.id ? String(editing.id) : null;
+
+  const editingCategoryId =
+    tab === 'categories' && editing?.id ? String(editing.id) : null;
 
   const { data: locationDeleteCheck, isLoading: loadingLocationDeleteCheck } = useQuery({
     queryKey: ['location-delete-check', editingLocationId],
@@ -55,6 +66,15 @@ export function OperationalCadastrosPanel() {
         .get(`/stock/locations/${editingLocationId}/delete-check`)
         .then((r) => r.data.data as DeleteCheck),
     enabled: !!editingLocationId && modalOpen && canDeleteLocation,
+  });
+
+  const { data: categoryDeleteCheck, isLoading: loadingCategoryDeleteCheck } = useQuery({
+    queryKey: ['category-delete-check', editingCategoryId],
+    queryFn: () =>
+      api
+        .get(`/products/categories/${editingCategoryId}/delete-check`)
+        .then((r) => r.data.data as DeleteCheck),
+    enabled: !!editingCategoryId && modalOpen && canDeleteCategory,
   });
 
   const { data = [], isLoading } = useQuery({
@@ -105,7 +125,9 @@ export function OperationalCadastrosPanel() {
     onSuccess: () => {
       toast.success(editing ? 'Atualizado' : 'Cadastrado');
       queryClient.invalidateQueries({ queryKey: [tab] });
-      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      if (tab === 'locations') queryClient.invalidateQueries({ queryKey: ['locations'] });
+      if (tab === 'categories') queryClient.invalidateQueries({ queryKey: ['categories'] });
+      if (tab === 'suppliers') queryClient.invalidateQueries({ queryKey: ['suppliers'] });
       setModalOpen(false);
     },
     onError: (err: { response?: { data?: { message?: string } } }) =>
@@ -124,6 +146,18 @@ export function OperationalCadastrosPanel() {
       toast.error(err.response?.data?.message || 'Não foi possível excluir o local'),
   });
 
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/products/categories/${id}`),
+    onSuccess: () => {
+      toast.success('Categoria excluída');
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setModalOpen(false);
+      setEditing(null);
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err.response?.data?.message || 'Não foi possível excluir a categoria'),
+  });
+
   const confirmPermanentDelete = (label: string, name: string) =>
     window.confirm(
       `Excluir permanentemente ${label} "${name}"?\n\nEsta ação não pode ser desfeita.`
@@ -136,7 +170,16 @@ export function OperationalCadastrosPanel() {
     deleteLocationMutation.mutate(String(editing.id));
   };
 
-  const showDeleteSection = editing && tab === 'locations' && canDeleteLocation;
+  const handleDeleteCategory = () => {
+    if (!editing?.id || !categoryDeleteCheck?.canDelete) return;
+    const name = String(form.name || 'esta categoria');
+    if (!confirmPermanentDelete('a categoria', name)) return;
+    deleteCategoryMutation.mutate(String(editing.id));
+  };
+
+  const showDeleteSection =
+    editing &&
+    ((tab === 'locations' && canDeleteLocation) || (tab === 'categories' && canDeleteCategory));
 
   useEffect(() => {
     setSearch('');
@@ -147,9 +190,13 @@ export function OperationalCadastrosPanel() {
       ? editing
         ? 'Editar Fornecedor'
         : 'Novo Fornecedor'
-      : editing
-        ? 'Editar Local'
-        : 'Novo Local';
+      : tab === 'locations'
+        ? editing
+          ? 'Editar Local'
+          : 'Novo Local'
+        : editing
+          ? 'Editar Categoria'
+          : 'Nova Categoria';
 
   return (
     <>
@@ -199,6 +246,15 @@ export function OperationalCadastrosPanel() {
                   key: 'code',
                   header: 'Código',
                   render: (r: ActiveEntity & { code?: string }) => r.code || '-',
+                },
+              ]
+            : []),
+          ...(tab === 'categories'
+            ? [
+                {
+                  key: 'products',
+                  header: 'Produtos',
+                  render: (r: ActiveEntity) => String(r._count?.products ?? 0),
                 },
               ]
             : []),
@@ -273,6 +329,9 @@ export function OperationalCadastrosPanel() {
           {editing && tab === 'suppliers' && (
             <ActiveToggleField active={active} onChange={setActive} />
           )}
+          {editing && tab === 'categories' && (
+            <ActiveToggleField active={active} onChange={setActive} />
+          )}
           {editing && tab === 'locations' && canDeleteLocation && (
             <DeleteCadastroSection
               title="Excluir local"
@@ -283,6 +342,18 @@ export function OperationalCadastrosPanel() {
               loading={deleteLocationMutation.isPending}
               checking={loadingLocationDeleteCheck}
               onDelete={handleDeleteLocation}
+            />
+          )}
+          {editing && tab === 'categories' && canDeleteCategory && (
+            <DeleteCadastroSection
+              title="Excluir categoria"
+              entityLabel="categoria"
+              canDelete={!!categoryDeleteCheck?.canDelete}
+              reasons={categoryDeleteCheck?.reasons ?? []}
+              okMessage="Esta categoria não possui produtos vinculados."
+              loading={deleteCategoryMutation.isPending}
+              checking={loadingCategoryDeleteCheck}
+              onDelete={handleDeleteCategory}
             />
           )}
           <div className={`flex gap-2 sm:col-span-2 ${showDeleteSection ? 'justify-between' : 'justify-end'}`}>
