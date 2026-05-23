@@ -1,6 +1,6 @@
 import { useState, useMemo, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, MapPin, AlertTriangle, Search, X, Pencil } from 'lucide-react';
+import { Boxes, MapPin, AlertTriangle, Search, X, Pencil, Plus } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -14,11 +14,13 @@ import { useAuthStore } from '@/stores/authStore';
 
 export function StockPage() {
   const queryClient = useQueryClient();
+  const canCreateProduct = useAuthStore((s) => s.hasPermission('products:CREATE'));
   const canEditProduct = useAuthStore((s) => s.hasPermission('products:UPDATE'));
 
   const [search, setSearch] = useState('');
   const [locationId, setLocationId] = useState('');
   const [batch, setBatch] = useState('');
+  const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   const { data: locations, isLoading: loadingLoc } = useQuery({
@@ -71,9 +73,33 @@ export function StockPage() {
     queryClient.invalidateQueries({ queryKey: ['products'] });
   };
 
+  const openCreateProduct = () => {
+    setEditingProductId(null);
+    setProductModalOpen(true);
+  };
+
+  const openEditProduct = (id: string) => {
+    setEditingProductId(id);
+    setProductModalOpen(true);
+  };
+
+  const closeProductModal = () => {
+    setProductModalOpen(false);
+    setEditingProductId(null);
+  };
+
   return (
     <div className="page-content">
-      <PageHeader title="Estoque" />
+      <PageHeader
+        title="Estoque"
+        action={
+          canCreateProduct ? (
+            <Button onClick={openCreateProduct} className="w-full sm:w-auto">
+              <Plus className="h-4 w-4" /> Novo Produto
+            </Button>
+          ) : undefined
+        }
+      />
 
       {loadingLoc ? (
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -256,7 +282,7 @@ export function StockPage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => setEditingProductId(i.product.id)}
+                      onClick={() => openEditProduct(i.product.id)}
                       aria-label={`Editar ${i.product.name}`}
                     >
                       <Pencil className="h-4 w-4" />
@@ -268,10 +294,10 @@ export function StockPage() {
         ]}
       />
 
-      {canEditProduct && (
+      {(canCreateProduct || canEditProduct) && (
         <ProductFormModal
-          open={!!editingProductId}
-          onClose={() => setEditingProductId(null)}
+          open={productModalOpen}
+          onClose={closeProductModal}
           productId={editingProductId}
           onSuccess={handleProductSaved}
         />
