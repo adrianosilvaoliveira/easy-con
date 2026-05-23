@@ -12,8 +12,20 @@ import { Button } from '@/components/ui/Button';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { formatProductName } from '@/utils/format';
 import { CategoryFormModal } from '@/components/products/CategoryFormModal';
+import { SupplierFormModal } from '@/components/suppliers/SupplierFormModal';
+import { LocationFormModal } from '@/components/stock/LocationFormModal';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
+
+function selectOptionValues(
+  items: { name: string }[] | undefined,
+  current: string | undefined
+): string[] {
+  const names = items?.map((i) => i.name) ?? [];
+  const value = current?.trim();
+  if (value && !names.includes(value)) return [value, ...names];
+  return names;
+}
 
 export const productSchema = z.object({
   name: z
@@ -57,12 +69,29 @@ export function ProductFormModal({
   const isEdit = !!productId;
   const queryClient = useQueryClient();
   const canCreateCategory = useAuthStore((s) => s.hasPermission('products:CREATE'));
+  const canCreateSupplier = useAuthStore((s) => s.hasPermission('products:CREATE'));
+  const canCreateLocation = useAuthStore((s) => s.hasPermission('stock:CREATE'));
   const [active, setActive] = useState(true);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.get('/products/categories').then((r) => r.data.data),
+    enabled: open,
+  });
+
+  const { data: suppliers } = useQuery({
+    queryKey: ['suppliers'],
+    queryFn: () =>
+      api.get('/suppliers', { params: { includeInactive: 'false' } }).then((r) => r.data.data),
+    enabled: open,
+  });
+
+  const { data: locations } = useQuery({
+    queryKey: ['locations'],
+    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
     enabled: open,
   });
 
@@ -156,34 +185,43 @@ export function ProductFormModal({
         <p className="py-8 text-center text-slate-500">Carregando...</p>
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
-          <Controller
-            name="name"
-            control={control}
-            render={({ field }) => (
-              <Input
-                label="Nome *"
-                error={errors.name?.message}
-                {...field}
-                className="uppercase"
-                onChange={(e) => field.onChange(formatProductName(e.target.value))}
-              />
-            )}
-          />
+          <div className="sm:col-span-2">
+            <Controller
+              name="name"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  label="Nome *"
+                  error={errors.name?.message}
+                  {...field}
+                  className="uppercase"
+                  onChange={(e) => field.onChange(formatProductName(e.target.value))}
+                />
+              )}
+            />
+          </div>
           <Input label="Código Interno *" error={errors.internalCode?.message} {...register('internalCode')} />
           <Input label="Código de Barras" {...register('barcode')} />
           <div>
-            <label className="form-label">Categoria *</label>
-            <div className="flex gap-2">
+            <label className="form-label" htmlFor="product-category">
+              Categoria *
+            </label>
+            <div
+              className={cn(
+                'flex overflow-hidden rounded-lg border bg-white shadow-sm focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 dark:bg-slate-800',
+                errors.categoryId
+                  ? 'border-red-400 focus-within:border-red-400 focus-within:ring-red-200'
+                  : 'border-surface-border dark:border-slate-600'
+              )}
+            >
               <Controller
                 name="categoryId"
                 control={control}
                 render={({ field }) => (
                   <select
                     {...field}
-                    className={cn(
-                      'input-field min-w-0 flex-1',
-                      errors.categoryId && 'border-red-400 focus:ring-red-200'
-                    )}
+                    id="product-category"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-0 dark:text-slate-100"
                   >
                     <option value="">Selecione...</option>
                     {categories?.map((c: { id: string; name: string }) => (
@@ -198,7 +236,7 @@ export function ProductFormModal({
                 <button
                   type="button"
                   onClick={() => setCategoryModalOpen(true)}
-                  className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-primary-200 bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
+                  className="flex w-10 shrink-0 items-center justify-center border-l border-surface-border bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-slate-600 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
                   title="Cadastrar nova categoria"
                 >
                   <Plus className="h-5 w-5" />
@@ -209,10 +247,88 @@ export function ProductFormModal({
               <p className="mt-1 text-xs text-red-600">{errors.categoryId.message}</p>
             )}
           </div>
-          <Input label="Fabricante" {...register('manufacturer')} />
+          <div>
+            <label className="form-label" htmlFor="product-supplier">
+              Fornecedor
+            </label>
+            <div
+              className={cn(
+                'flex overflow-hidden rounded-lg border bg-white shadow-sm focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 dark:bg-slate-800',
+                'border-surface-border dark:border-slate-600'
+              )}
+            >
+              <Controller
+                name="manufacturer"
+                control={control}
+                render={({ field }) => (
+                  <select
+                    {...field}
+                    id="product-supplier"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-0 dark:text-slate-100"
+                  >
+                    <option value="">Selecione...</option>
+                    {selectOptionValues(suppliers, field.value).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
+              {canCreateSupplier && (
+                <button
+                  type="button"
+                  onClick={() => setSupplierModalOpen(true)}
+                  className="flex w-10 shrink-0 items-center justify-center border-l border-surface-border bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-slate-600 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
+                  title="Cadastrar novo fornecedor"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
           <Input label="Unidade" {...register('unit')} />
           <Input label="Qtd. Mínima" type="number" {...register('minQuantity')} />
-          <Input label="Localização" {...register('location')} />
+          <div>
+            <label className="form-label" htmlFor="product-location">
+              Localização
+            </label>
+            <div
+              className={cn(
+                'flex overflow-hidden rounded-lg border bg-white shadow-sm focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 dark:bg-slate-800',
+                'border-surface-border dark:border-slate-600'
+              )}
+            >
+              <Controller
+                name="location"
+                control={control}
+                render={({ field }) => (
+                  <select
+                    {...field}
+                    id="product-location"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-0 dark:text-slate-100"
+                  >
+                    <option value="">Selecione...</option>
+                    {selectOptionValues(locations, field.value).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
+              {canCreateLocation && (
+                <button
+                  type="button"
+                  onClick={() => setLocationModalOpen(true)}
+                  className="flex w-10 shrink-0 items-center justify-center border-l border-surface-border bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-slate-600 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
+                  title="Cadastrar novo local de estoque"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="sm:col-span-2">
             <Input label="Observações" {...register('notes')} />
           </div>
@@ -233,6 +349,22 @@ export function ProductFormModal({
       open={categoryModalOpen}
       onClose={() => setCategoryModalOpen(false)}
       onSuccess={(category) => setValue('categoryId', category.id, { shouldValidate: true })}
+    />
+    <SupplierFormModal
+      open={supplierModalOpen}
+      onClose={() => setSupplierModalOpen(false)}
+      onSuccess={(supplier) => {
+        queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+        setValue('manufacturer', supplier.name, { shouldValidate: true });
+      }}
+    />
+    <LocationFormModal
+      open={locationModalOpen}
+      onClose={() => setLocationModalOpen(false)}
+      onSuccess={(location) => {
+        queryClient.invalidateQueries({ queryKey: ['locations'] });
+        setValue('location', location.name, { shouldValidate: true });
+      }}
     />
   </>
   );
