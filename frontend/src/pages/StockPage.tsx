@@ -1,40 +1,25 @@
 import { useState, useMemo, type KeyboardEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Boxes, MapPin, AlertTriangle, Search, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Boxes, MapPin, AlertTriangle, Search, X, Pencil } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { CardSkeleton } from '@/components/ui/Skeleton';
-import { ProductCatalogPanel } from '@/components/products/ProductCatalogPanel';
+import { ProductFormModal } from '@/components/products/ProductFormModal';
 import type { StockLocation, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/authStore';
 
-type StockTab = 'itens' | 'produtos';
-
 export function StockPage() {
-  const hasPermission = useAuthStore((s) => s.hasPermission);
-  const canViewProducts = hasPermission('products:READ');
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const tab: StockTab =
-    canViewProducts && searchParams.get('aba') === 'produtos' ? 'produtos' : 'itens';
-
-  const setTab = (next: StockTab) => {
-    if (next === 'produtos') setSearchParams({ aba: 'produtos' });
-    else setSearchParams({});
-  };
-
-  const stockTabs: { id: StockTab; label: string }[] = [
-    { id: 'itens', label: 'Saldo por lote' },
-    ...(canViewProducts ? [{ id: 'produtos' as const, label: 'Produtos' }] : []),
-  ];
+  const queryClient = useQueryClient();
+  const canEditProduct = useAuthStore((s) => s.hasPermission('products:UPDATE'));
 
   const [search, setSearch] = useState('');
   const [locationId, setLocationId] = useState('');
   const [batch, setBatch] = useState('');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   const { data: locations, isLoading: loadingLoc } = useQuery({
     queryKey: ['stock-locations'],
@@ -79,34 +64,16 @@ export function StockPage() {
     }
   };
 
+  const handleProductSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+    queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+    queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+  };
+
   return (
     <div className="page-content">
       <PageHeader title="Estoque" />
-
-      {stockTabs.length > 1 && (
-        <div className="flex flex-wrap gap-2 border-b border-surface-border pb-2 dark:border-slate-600">
-          {stockTabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cn(
-                'rounded-lg px-4 py-2 text-sm font-medium transition',
-                tab === t.id
-                  ? 'bg-primary-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'produtos' ? (
-        <ProductCatalogPanel allowEdit />
-      ) : (
-        <>
 
       {loadingLoc ? (
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -167,7 +134,10 @@ export function StockPage() {
       {selectedLocation && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm dark:border-primary-800 dark:bg-primary-950/40">
           <p className="text-slate-700 dark:text-slate-200">
-            Filtrando por <span className="font-semibold text-primary-800 dark:text-primary-200">{selectedLocation.name}</span>
+            Filtrando por{' '}
+            <span className="font-semibold text-primary-800 dark:text-primary-200">
+              {selectedLocation.name}
+            </span>
             {typeof total === 'number' && (
               <span className="text-slate-500 dark:text-slate-400"> — {total} registro(s)</span>
             )}
@@ -277,9 +247,34 @@ export function StockPage() {
             header: 'Quantidade',
             render: (i) => <span className="font-semibold">{i.quantity}</span>,
           },
+          ...(canEditProduct
+            ? [
+                {
+                  key: 'actions',
+                  header: '',
+                  render: (i: StockItem) => (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setEditingProductId(i.product.id)}
+                      aria-label={`Editar ${i.product.name}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
-        </>
+
+      {canEditProduct && (
+        <ProductFormModal
+          open={!!editingProductId}
+          onClose={() => setEditingProductId(null)}
+          productId={editingProductId}
+          onSuccess={handleProductSaved}
+        />
       )}
     </div>
   );

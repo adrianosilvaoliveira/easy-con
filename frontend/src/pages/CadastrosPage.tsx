@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,7 +35,10 @@ export function CadastrosPage() {
   const canDeleteLocation = hasPermission('stock:DELETE');
   const canDeleteCategory = hasPermission('products:DELETE');
   const canViewProducts = hasPermission(ROUTE_PERMISSIONS.produtos);
-  const [tab, setTab] = useState<Tab>('categories');
+  const [searchParams] = useSearchParams();
+  const initialTab: Tab =
+    searchParams.get('aba') === 'produtos' && canViewProducts ? 'products' : 'categories';
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [search, setSearch] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
