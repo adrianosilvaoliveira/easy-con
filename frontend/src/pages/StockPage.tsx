@@ -1,6 +1,6 @@
 import { useState, useMemo, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, MapPin, AlertTriangle, Search, X, Pencil, Plus } from 'lucide-react';
+import { Boxes, MapPin, Search, X, Pencil, Plus } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -44,11 +44,6 @@ export function StockPage() {
         .then((r) => r.data),
   });
 
-  const { data: alerts } = useQuery({
-    queryKey: ['stock-alerts'],
-    queryFn: () => api.get('/stock/alerts').then((r) => r.data.data),
-  });
-
   const total = items?.meta?.total;
 
   const selectedLocation = useMemo(
@@ -70,7 +65,6 @@ export function StockPage() {
   const handleProductSaved = () => {
     queryClient.invalidateQueries({ queryKey: ['stock-items'] });
     queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
-    queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
     queryClient.invalidateQueries({ queryKey: ['products'] });
   };
 
@@ -177,28 +171,6 @@ export function StockPage() {
             <X className="h-3.5 w-3.5" />
             Limpar filtro
           </button>
-        </div>
-      )}
-
-      {(alerts?.belowMin?.length > 0 || alerts?.expiring?.length > 0) && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {alerts.belowMin.length > 0 && (
-            <div className="card border-red-200 bg-red-50/30 dark:border-red-900/50 dark:bg-red-950/30">
-              <h3 className="flex items-center gap-2 font-semibold text-red-700 dark:text-red-300">
-                <AlertTriangle className="h-5 w-5" /> Abaixo do Mínimo ({alerts.belowMin.length})
-              </h3>
-              <ul className="mt-3 space-y-1 text-sm">
-                {alerts.belowMin.map((p: { name: string; current: number; minQuantity: number }) => (
-                  <li key={p.name} className="flex justify-between">
-                    <span>{p.name}</span>
-                    <span className="text-red-600 dark:text-red-400">
-                      {p.current}/{p.minQuantity}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 
