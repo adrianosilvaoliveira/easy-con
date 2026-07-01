@@ -23,6 +23,14 @@ export function errorHandler(
   }
 
   const prismaCode = (err as { code?: string }).code;
+  if (prismaCode === 'P2002') {
+    res.status(422).json({
+      success: false,
+      code: 'VALIDATION_ERROR',
+      message: 'Registro duplicado. Verifique códigos ou identificadores únicos.',
+    });
+    return;
+  }
   if (prismaCode === 'P2021' || prismaCode === 'P1001') {
     res.status(503).json({
       success: false,

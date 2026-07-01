@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { createProductSchema, updateProductSchema, createBatchSchema } from './products.dto';
 import { normalizeProductName } from '../../shared/utils/productName';
+import { generateInternalCode, normalizeInternalCode } from '../../shared/utils/internalCode';
 import { BatchService } from '../batches/BatchService';
 
 type CreateProductDTO = z.infer<typeof createProductSchema>;
@@ -83,13 +84,15 @@ export class ProductService {
   }
 
   static async create(data: CreateProductDTO) {
+    const internalCode = data.internalCode ?? (await generateInternalCode());
+
     const exists = await prisma.product.findUnique({
-      where: { internalCode: data.internalCode },
+      where: { internalCode },
     });
     if (exists) throw new ValidationError('Código interno já existe');
 
     return prisma.product.create({
-      data: { ...data, name: normalizeProductName(data.name) },
+      data: { ...data, internalCode, name: normalizeProductName(data.name) },
       include: { category: true },
     });
   }
@@ -97,6 +100,19 @@ export class ProductService {
   static async update(id: string, data: UpdateProductDTO) {
     await this.findById(id);
     const normalized = data.name !== undefined ? { ...data, name: normalizeProductName(data.name) } : data;
+    if (data.internalCode !== undefined) {
+      const internalCode = normalizeInternalCode(data.internalCode);
+      if (!internalCode) throw new ValidationError('Código interno obrigatório');
+      const duplicate = await prisma.product.findFirst({
+        where: { internalCode, NOT: { id } },
+      });
+      if (duplicate) throw new ValidationError('Código interno já existe');
+      return prisma.product.update({
+        where: { id },
+        data: { ...normalized, internalCode },
+        include: { category: true },
+      });
+    }
     return prisma.product.update({
       where: { id },
       data: normalized,

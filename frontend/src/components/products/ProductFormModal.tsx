@@ -16,6 +16,7 @@ import { SupplierFormModal } from '@/components/suppliers/SupplierFormModal';
 import { LocationFormModal } from '@/components/stock/LocationFormModal';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 function selectOptionValues(
   items: { name: string }[] | undefined,
@@ -32,7 +33,7 @@ export const productSchema = z.object({
     .string()
     .min(2, 'Nome obrigatório')
     .transform((value) => formatProductName(value)),
-  internalCode: z.string().min(1, 'Código obrigatório'),
+  internalCode: z.string().max(50, 'Código muito longo').optional(),
   barcode: z.string().optional(),
   categoryId: z.string().uuid('Selecione a categoria'),
   manufacturer: z.string().optional(),
@@ -138,14 +139,13 @@ export function ProductFormModal({
     mutationFn: (data: ProductFormData) => api.post('/products', data),
     onSuccess: (res) => {
       const p = res.data.data as CreatedProduct;
-      toast.success('Produto cadastrado');
+      toast.success(`Produto cadastrado — código ${p.internalCode}`);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
       onSuccess?.(p);
       onClose();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao salvar'),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao salvar')),
   });
 
   const updateMutation = useMutation({
@@ -158,14 +158,22 @@ export function ProductFormModal({
       onSuccess?.(res.data.data);
       onClose();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao atualizar'),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao atualizar')),
   });
 
   const onSubmit = (data: ProductFormData) => {
-    const payload = { ...data, name: formatProductName(data.name) };
+    const trimmedCode = data.internalCode?.trim();
+    if (isEdit && !trimmedCode) {
+      toast.error('Código interno obrigatório');
+      return;
+    }
+    const payload = {
+      ...data,
+      name: formatProductName(data.name),
+      ...(trimmedCode ? { internalCode: trimmedCode } : {}),
+    };
     if (isEdit) {
-      updateMutation.mutate({ ...payload, active });
+      updateMutation.mutate({ ...payload, active, internalCode: trimmedCode! });
     } else {
       createMutation.mutate(payload);
     }
@@ -200,7 +208,12 @@ export function ProductFormModal({
               )}
             />
           </div>
-          <Input label="Código Interno *" error={errors.internalCode?.message} {...register('internalCode')} />
+          <Input
+            label="Código Interno"
+            placeholder={isEdit ? undefined : 'Gerado automaticamente se vazio'}
+            error={errors.internalCode?.message}
+            {...register('internalCode')}
+          />
           <Input label="Código de Barras" {...register('barcode')} />
           <div>
             <label className="form-label" htmlFor="product-category">

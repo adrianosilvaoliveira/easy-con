@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizeProductName } from '../../shared/utils/productName';
+import { normalizeInternalCode } from '../../shared/utils/internalCode';
 
 const productNameSchema = z
   .string()
@@ -7,9 +8,14 @@ const productNameSchema = z
   .max(200)
   .transform(normalizeProductName);
 
+const optionalInternalCodeSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? normalizeInternalCode(value) : value),
+  z.string().max(50).optional()
+);
+
 export const createProductSchema = z.object({
   name: productNameSchema,
-  internalCode: z.string().min(1).max(50),
+  internalCode: optionalInternalCodeSchema,
   barcode: z.string().optional(),
   categoryId: z.string().uuid(),
   manufacturer: z.string().optional(),
