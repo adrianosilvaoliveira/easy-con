@@ -16,6 +16,10 @@ import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { SupplierSearchSelect } from '@/components/suppliers/SupplierSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
+import {
+  MovementApprovalActions,
+  MovementStatusBadge,
+} from '@/components/movements/MovementApprovalActions';
 
 const batchLineSchema = z.object({
   batchNumber: z.string().min(1, 'Lote obrigatório'),
@@ -128,9 +132,11 @@ export function EntriesPage() {
       return api.post('/movements/entries', body);
     },
     onSuccess: (res) => {
-      const { batchCount, totalQuantity: total } = res.data.data;
+      const { batchCount, totalQuantity: total, pendingApproval } = res.data.data;
       toast.success(
-        `Entrada registrada: ${batchCount} lote(s), ${total} unidade(s) no total`
+        pendingApproval
+          ? `Entrada enviada para aprovação (${batchCount} lote(s), ${total} un.)`
+          : `Entrada registrada: ${batchCount} lote(s), ${total} unidade(s) no total`
       );
       queryClient.invalidateQueries({ queryKey: ['entries'] });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
@@ -177,7 +183,19 @@ export function EntriesPage() {
           },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
           { key: 'dest', header: 'Destino', render: (m) => m.destinationLocation?.name || '-' },
+          { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
+          {
+            key: 'actions',
+            header: 'Ações',
+            render: (m) => (
+              <MovementApprovalActions
+                movementId={m.id}
+                status={m.status}
+                invalidateKeys={['entries']}
+              />
+            ),
+          },
         ]}
       />
 

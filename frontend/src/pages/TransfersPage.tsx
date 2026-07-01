@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, ArrowLeftRight, Check, X } from 'lucide-react';
+import { Plus, ArrowLeftRight } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { Button } from '@/components/ui/Button';
@@ -11,10 +11,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
-import { useAuthStore } from '@/stores/authStore';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, formatProductName } from '@/utils/format';
+import {
+  MovementApprovalActions,
+  MovementStatusBadge,
+} from '@/components/movements/MovementApprovalActions';
 
 const transferSchema = z.object({
   type: z.literal('TRANSFERENCIA'),
@@ -25,17 +27,9 @@ const transferSchema = z.object({
   reason: z.string().optional(),
 });
 
-const statusVariant: Record<string, 'warning' | 'success' | 'danger' | 'info'> = {
-  PENDENTE: 'warning',
-  APROVADA: 'success',
-  REJEITADA: 'danger',
-  CONCLUIDA: 'info',
-};
-
 export function TransfersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const queryClient = useQueryClient();
-  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   const { data: products } = useQuery({
     queryKey: ['products-list'],
@@ -64,21 +58,20 @@ export function TransfersPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: z.infer<typeof transferSchema>) => api.post('/movements/transfers', data),
-    onSuccess: () => {
-      toast.success('Transferência solicitada');
+    onSuccess: (res) => {
+      const status = res.data.data?.status;
+      toast.success(
+        status === 'PENDENTE'
+          ? 'Transferência enviada para aprovação'
+          : 'Transferência efetivada'
+      );
       queryClient.invalidateQueries({ queryKey: ['transfers'] });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
       setModalOpen(false);
       reset();
     },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
-      api.patch(`/movements/transfers/${id}/approve`, { approved }),
-    onSuccess: () => {
-      toast.success('Transferência processada');
-      queryClient.invalidateQueries({ queryKey: ['transfers'] });
-    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err.response?.data?.message || 'Erro ao registrar transferência'),
   });
 
   return (
@@ -102,27 +95,18 @@ export function TransfersPage() {
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name },
           { key: 'dest', header: 'Destino', render: (m) => m.destinationLocation?.name },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
-          { key: 'status', header: 'Status', render: (m) => <Badge variant={statusVariant[m.status] || 'default'}>{m.status}</Badge> },
+          { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
+          { key: 'user', header: 'Usuário', render: (m) => m.user.name },
           {
             key: 'actions',
             header: 'Ações',
-            render: (m) =>
-              m.status === 'PENDENTE' && hasPermission('movements:APPROVE') ? (
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => approveMutation.mutate({ id: m.id, approved: true })}
-                    className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => approveMutation.mutate({ id: m.id, approved: false })}
-                    className="rounded p-1 text-red-600 hover:bg-red-50"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : null,
+            render: (m) => (
+              <MovementApprovalActions
+                movementId={m.id}
+                status={m.status}
+                invalidateKeys={['transfers']}
+              />
+            ),
           },
         ]}
       />

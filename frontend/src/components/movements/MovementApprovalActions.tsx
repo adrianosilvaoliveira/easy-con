@@ -1,0 +1,78 @@
+import { Check, X } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import api from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
+import { Badge } from '@/components/ui/Badge';
+import { movementStatusLabel } from '@/utils/format';
+
+export const movementStatusVariant: Record<string, 'warning' | 'success' | 'danger' | 'info' | 'default'> = {
+  PENDENTE: 'warning',
+  APROVADA: 'success',
+  REJEITADA: 'danger',
+  CONCLUIDA: 'info',
+};
+
+export function MovementStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={movementStatusVariant[status] || 'default'}>
+      {movementStatusLabel(status)}
+    </Badge>
+  );
+}
+
+interface MovementApprovalActionsProps {
+  movementId: string;
+  status: string;
+  invalidateKeys?: string[];
+}
+
+export function MovementApprovalActions({
+  movementId,
+  status,
+  invalidateKeys = [],
+}: MovementApprovalActionsProps) {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const queryClient = useQueryClient();
+
+  const approveMutation = useMutation({
+    mutationFn: ({ approved }: { approved: boolean }) =>
+      api.patch(`/movements/${movementId}/approve`, { approved }),
+    onSuccess: (_, { approved }) => {
+      toast.success(approved ? 'Movimentação aprovada e efetivada' : 'Movimentação rejeitada');
+      invalidateKeys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err.response?.data?.message || 'Erro ao processar movimentação'),
+  });
+
+  if (status !== 'PENDENTE' || !hasPermission('movements:APPROVE')) {
+    return null;
+  }
+
+  return (
+    <div className="flex gap-1">
+      <button
+        type="button"
+        title="Aprovar"
+        onClick={() => approveMutation.mutate({ approved: true })}
+        disabled={approveMutation.isPending}
+        className="rounded p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+      >
+        <Check className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        title="Rejeitar"
+        onClick={() => approveMutation.mutate({ approved: false })}
+        disabled={approveMutation.isPending}
+        className="rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}

@@ -15,6 +15,10 @@ import { Badge } from '@/components/ui/Badge';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
+import {
+  MovementApprovalActions,
+  MovementStatusBadge,
+} from '@/components/movements/MovementApprovalActions';
 
 const exitSchema = z.object({
   type: z.enum(['SAIDA_CONSUMO', 'SAIDA_CIRURGIA', 'SAIDA_CONSULTA', 'SAIDA_PERDA', 'SAIDA_VENCIMENTO']),
@@ -58,8 +62,9 @@ export function ExitsPage() {
 
   const mutation = useMutation({
     mutationFn: (data: z.infer<typeof exitSchema>) => api.post('/movements/exits', data),
-    onSuccess: () => {
-      toast.success('Saída registrada');
+    onSuccess: (res) => {
+      const pendingApproval = res.data.data?.pendingApproval;
+      toast.success(pendingApproval ? 'Saída enviada para aprovação' : 'Saída registrada');
       queryClient.invalidateQueries({ queryKey: ['exits'] });
       setModalOpen(false);
       reset();
@@ -88,7 +93,19 @@ export function ExitsPage() {
           { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name || '-' },
+          { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
+          {
+            key: 'actions',
+            header: 'Ações',
+            render: (m) => (
+              <MovementApprovalActions
+                movementId={m.id}
+                status={m.status}
+                invalidateKeys={['exits']}
+              />
+            ),
+          },
         ]}
       />
 

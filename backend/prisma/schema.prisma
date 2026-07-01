@@ -331,6 +331,7 @@ model StockMovement {
   invoiceNumber         String?
   reason                String?
   notes                 String?
+  metadata              Json?
   movementDate          DateTime       @default(now())
   userId                String
   user                  User           @relation("MovementUser", fields: [userId], references: [id])

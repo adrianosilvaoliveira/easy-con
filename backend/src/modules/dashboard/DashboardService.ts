@@ -41,7 +41,7 @@ export class DashboardService {
         where: { movementDate: { gte: today, lt: tomorrow } },
       }),
       prisma.stockMovement.count({
-        where: { type: 'TRANSFERENCIA', status: 'PENDENTE' },
+        where: { status: 'PENDENTE' },
       }),
       prisma.product.findMany({
         where: { active: true },

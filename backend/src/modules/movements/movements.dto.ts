@@ -71,10 +71,13 @@ export const transferSchema = baseMovement.extend({
   destinationLocationId: z.string().uuid(),
 });
 
-export const approveTransferSchema = z.object({
+export const approveMovementSchema = z.object({
   approved: z.boolean(),
   notes: z.string().optional(),
 });
+
+/** @deprecated use approveMovementSchema */
+export const approveTransferSchema = approveMovementSchema;
 
 export const listMovementsSchema = z.object({
   page: z.string().optional(),

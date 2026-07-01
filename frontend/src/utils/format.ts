@@ -25,3 +25,13 @@ export function formatProductName(name: string): string {
 export function movementTypeLabel(type: string): string {
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
 }
+
+export function movementStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PENDENTE: 'Pendente',
+    APROVADA: 'Aprovada',
+    REJEITADA: 'Rejeitada',
+    CONCLUIDA: 'Concluída',
+  };
+  return labels[status] ?? status;
+}

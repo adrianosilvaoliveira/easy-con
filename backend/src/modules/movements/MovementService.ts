@@ -1,22 +1,26 @@
-import { MovementStatus, MovementType, Prisma } from '@prisma/client';
+import { MovementStatus, MovementType, Prisma, RoleName } from '@prisma/client';
 import { prisma } from '../../database/prisma';
 import { NotFoundError, ValidationError } from '../../shared/errors/AppError';
 import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagination';
 import { z } from 'zod';
 import { entrySchema, exitSchema, transferSchema } from './movements.dto';
 import { BatchService } from '../batches/BatchService';
-
 type EntryDTO = z.infer<typeof entrySchema>;
 type ExitDTO = z.infer<typeof exitSchema>;
 type TransferDTO = z.infer<typeof transferSchema>;
-
+type PendingEntryMetadata = {
+  kind: 'ENTRY';
+  batchNumber: string;
+  expirationDate: string;
+  manufacturingDate: string;
+  unitPrice?: number;
+};
 const ENTRY_TYPES: MovementType[] = [
   'ENTRADA_COMPRA',
   'ENTRADA_MANUAL',
   'AJUSTE_ENTRADA',
   'DEVOLUCAO',
 ];
-
 const EXIT_TYPES: MovementType[] = [
   'SAIDA_CONSUMO',
   'SAIDA_CIRURGIA',
@@ -24,8 +28,23 @@ const EXIT_TYPES: MovementType[] = [
   'SAIDA_PERDA',
   'SAIDA_VENCIMENTO',
 ];
-
+const movementInclude = {
+  product: true,
+  originLocation: true,
+  destinationLocation: true,
+  supplier: true,
+  batch: true,
+  user: { select: { id: true, name: true } },
+  approvedBy: { select: { id: true, name: true } },
+} as const;
 export class MovementService {
+  private static async requiresApproval(userId: string): Promise<boolean> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: { select: { name: true } } },
+    });
+    return user?.role.name === ('OPERACIONAL' satisfies RoleName);
+  }
   private static async updateStock(
     productId: string,
     locationId: string,
@@ -36,7 +55,6 @@ export class MovementService {
     const existing = await prisma.stockItem.findFirst({
       where: { productId, locationId, batchId: batchKey },
     });
-
     if (existing) {
       const newQty = existing.quantity + quantityDelta;
       if (newQty < 0) throw new ValidationError('Quantidade insuficiente em estoque');
@@ -57,24 +75,116 @@ export class MovementService {
       throw new ValidationError('Item não encontrado no estoque de origem');
     }
   }
-
+  private static async updateStockInTx(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    locationId: string,
+    batchId: string | null | undefined,
+    quantityDelta: number
+  ) {
+    const batchKey = batchId ?? null;
+    const existing = await tx.stockItem.findFirst({
+      where: { productId, locationId, batchId: batchKey },
+    });
+    if (existing) {
+      const newQty = existing.quantity + quantityDelta;
+      if (newQty < 0) throw new ValidationError('Quantidade insuficiente em estoque');
+      await tx.stockItem.update({
+        where: { id: existing.id },
+        data: { quantity: newQty },
+      });
+    } else if (quantityDelta > 0) {
+      await tx.stockItem.create({
+        data: { productId, locationId, batchId: batchKey, quantity: quantityDelta },
+      });
+    } else {
+      throw new ValidationError('Item não encontrado no estoque');
+    }
+  }
+  private static async assertExitStockAvailable(data: ExitDTO) {
+    if (data.type !== 'SAIDA_VENCIMENTO' && data.batchId) {
+      const batch = await prisma.productBatch.findUnique({ where: { id: data.batchId } });
+      if (batch?.status === 'EXPIRED') {
+        throw new ValidationError('Não é permitido saída de lote vencido (exceto baixa por vencimento)');
+      }
+    }
+    if (data.batchId) {
+      const item = await prisma.stockItem.findFirst({
+        where: {
+          productId: data.productId,
+          locationId: data.originLocationId,
+          batchId: data.batchId,
+        },
+      });
+      if (!item || item.quantity < data.quantity) {
+        throw new ValidationError('Quantidade insuficiente no lote selecionado');
+      }
+      return;
+    }
+    await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
+  }
   static async createEntry(data: EntryDTO, userId: string) {
+    if (await this.requiresApproval(userId)) {
+      return this.createPendingEntry(data, userId);
+    }
+    return this.executeEntry(data, userId);
+  }
+  private static async createPendingEntry(data: EntryDTO, userId: string) {
     const product = await prisma.product.findUnique({ where: { id: data.productId } });
     if (!product) throw new NotFoundError('Produto não encontrado');
-
     const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
-
+    const movements = [];
+    for (const line of data.batches) {
+      const metadata: PendingEntryMetadata = {
+        kind: 'ENTRY',
+        batchNumber: line.batchNumber.trim(),
+        expirationDate: line.expirationDate,
+        manufacturingDate: line.manufacturingDate,
+        unitPrice: line.unitPrice,
+      };
+      const mov = await prisma.stockMovement.create({
+        data: {
+          type: data.type,
+          status: 'PENDENTE',
+          productId: data.productId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice ? new Prisma.Decimal(line.unitPrice) : undefined,
+          totalValue: line.unitPrice
+            ? new Prisma.Decimal(line.unitPrice * line.quantity)
+            : undefined,
+          destinationLocationId: data.destinationLocationId,
+          supplierId: data.supplierId,
+          invoiceNumber: data.invoiceNumber,
+          reason: data.reason,
+          notes: data.notes,
+          movementDate,
+          userId,
+          metadata,
+        },
+        include: movementInclude,
+      });
+      movements.push(mov);
+    }
+    return {
+      movements,
+      totalQuantity: movements.reduce((sum, m) => sum + m.quantity, 0),
+      batchCount: movements.length,
+      pendingApproval: true,
+    };
+  }
+  private static async executeEntry(data: EntryDTO, userId: string) {
+    const product = await prisma.product.findUnique({ where: { id: data.productId } });
+    if (!product) throw new NotFoundError('Produto não encontrado');
+    const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
     try {
       const movements = await prisma.$transaction(async (tx) => {
         const created = [];
-
         for (const line of data.batches) {
           const expirationDate = new Date(line.expirationDate);
           const manufacturingDate = new Date(line.manufacturingDate);
           const totalValue = line.unitPrice
             ? new Prisma.Decimal(line.unitPrice * line.quantity)
             : undefined;
-
           const batch = await BatchService.findOrCreateForEntry(tx, {
             productId: data.productId,
             stockLocationId: data.destinationLocationId,
@@ -86,7 +196,6 @@ export class MovementService {
             unitCost: line.unitPrice,
             userId,
           });
-
           const mov = await tx.stockMovement.create({
             data: {
               type: data.type,
@@ -104,15 +213,8 @@ export class MovementService {
               movementDate,
               userId,
             },
-            include: {
-              product: true,
-              destinationLocation: true,
-              supplier: true,
-              batch: true,
-              user: { select: { id: true, name: true } },
-            },
+            include: movementInclude,
           });
-
           await this.updateStockInTx(
             tx,
             data.productId,
@@ -123,21 +225,16 @@ export class MovementService {
           await BatchService.syncBatchQuantity(batch.id, tx);
           created.push(mov);
         }
-
         return created;
       });
-
       for (const movement of movements) {
         if (movement.batchId) {
           await BatchService.syncBatchAlerts(movement.batchId);
         }
       }
-
-      const totalQuantity = movements.reduce((sum, m) => sum + m.quantity, 0);
-
       return {
         movements,
-        totalQuantity,
+        totalQuantity: movements.reduce((sum, m) => sum + m.quantity, 0),
         batchCount: movements.length,
       };
     } catch (e) {
@@ -147,55 +244,34 @@ export class MovementService {
       throw e;
     }
   }
-
-  private static async updateStockInTx(
-    tx: Prisma.TransactionClient,
-    productId: string,
-    locationId: string,
-    batchId: string | null | undefined,
-    quantityDelta: number
-  ) {
-    const batchKey = batchId ?? null;
-    const existing = await tx.stockItem.findFirst({
-      where: { productId, locationId, batchId: batchKey },
-    });
-
-    if (existing) {
-      const newQty = existing.quantity + quantityDelta;
-      if (newQty < 0) throw new ValidationError('Quantidade insuficiente em estoque');
-      await tx.stockItem.update({
-        where: { id: existing.id },
-        data: { quantity: newQty },
-      });
-    } else if (quantityDelta > 0) {
-      await tx.stockItem.create({
-        data: { productId, locationId, batchId: batchKey, quantity: quantityDelta },
-      });
-    } else {
-      throw new ValidationError('Item não encontrado no estoque');
-    }
-  }
-
   static async createExit(data: ExitDTO, userId: string) {
-    if (data.type !== 'SAIDA_VENCIMENTO' && data.batchId) {
-      const batch = await prisma.productBatch.findUnique({ where: { id: data.batchId } });
-      if (batch?.status === 'EXPIRED') {
-        throw new ValidationError('Não é permitido saída de lote vencido (exceto baixa por vencimento)');
-      }
+    await this.assertExitStockAvailable(data);
+    if (await this.requiresApproval(userId)) {
+      return this.createPendingExit(data, userId);
     }
-
+    return this.executeExit(data, userId);
+  }
+  private static async createPendingExit(data: ExitDTO, userId: string) {
+    const movement = await prisma.stockMovement.create({
+      data: {
+        type: data.type,
+        status: 'PENDENTE',
+        productId: data.productId,
+        batchId: data.batchId,
+        quantity: data.quantity,
+        originLocationId: data.originLocationId,
+        reason: data.reason,
+        notes: data.notes,
+        movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+        userId,
+        metadata: { kind: 'EXIT' },
+      },
+      include: movementInclude,
+    });
+    return { ...movement, pendingApproval: true };
+  }
+  private static async executeExit(data: ExitDTO, userId: string) {
     if (data.batchId) {
-      const item = await prisma.stockItem.findFirst({
-        where: {
-          productId: data.productId,
-          locationId: data.originLocationId,
-          batchId: data.batchId,
-        },
-      });
-      if (!item || item.quantity < data.quantity) {
-        throw new ValidationError('Quantidade insuficiente no lote selecionado');
-      }
-
       return prisma.$transaction(async (tx) => {
         const mov = await tx.stockMovement.create({
           data: {
@@ -210,20 +286,24 @@ export class MovementService {
             movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
             userId,
           },
-          include: { product: true, originLocation: true, batch: true, user: { select: { name: true } } },
+          include: movementInclude,
         });
-        await this.updateStockInTx(tx, data.productId, data.originLocationId, data.batchId, -data.quantity);
+        await this.updateStockInTx(
+          tx,
+          data.productId,
+          data.originLocationId,
+          data.batchId,
+          -data.quantity
+        );
         await BatchService.syncBatchQuantity(data.batchId!, tx);
         return mov;
       });
     }
-
     const fefoPlan = await BatchService.getFefoBatches(
       data.productId,
       data.originLocationId,
       data.quantity
     );
-
     return prisma.$transaction(async (tx) => {
       const movements = [];
       for (const slice of fefoPlan) {
@@ -240,7 +320,7 @@ export class MovementService {
             movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
             userId,
           },
-          include: { product: true, originLocation: true, batch: true, user: { select: { name: true } } },
+          include: movementInclude,
         });
         await this.updateStockInTx(
           tx,
@@ -255,59 +335,282 @@ export class MovementService {
       return { ...movements[0], fefoAllocations: movements };
     });
   }
-
   static async createTransfer(data: TransferDTO, userId: string) {
-    const movement = await prisma.stockMovement.create({
-      data: {
-        type: 'TRANSFERENCIA',
-        status: 'PENDENTE',
+    if (await this.requiresApproval(userId)) {
+      return prisma.stockMovement.create({
+        data: {
+          type: 'TRANSFERENCIA',
+          status: 'PENDENTE',
+          productId: data.productId,
+          batchId: data.batchId,
+          quantity: data.quantity,
+          originLocationId: data.originLocationId,
+          destinationLocationId: data.destinationLocationId,
+          reason: data.reason,
+          notes: data.notes,
+          movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+          userId,
+        },
+        include: movementInclude,
+      });
+    }
+    const item = await prisma.stockItem.findFirst({
+      where: {
         productId: data.productId,
-        batchId: data.batchId,
-        quantity: data.quantity,
-        originLocationId: data.originLocationId,
-        destinationLocationId: data.destinationLocationId,
-        reason: data.reason,
-        notes: data.notes,
-        movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
-        userId,
-      },
-      include: {
-        product: true,
-        originLocation: true,
-        destinationLocation: true,
-        user: { select: { id: true, name: true } },
+        locationId: data.originLocationId,
+        batchId: data.batchId ?? null,
       },
     });
-
-    return movement;
+    if (!item || item.quantity < data.quantity) {
+      throw new ValidationError('Quantidade insuficiente no estoque de origem');
+    }
+    return prisma.$transaction(async (tx) => {
+      await this.updateStockInTx(
+        tx,
+        data.productId,
+        data.originLocationId,
+        data.batchId,
+        -data.quantity
+      );
+      await this.updateStockInTx(
+        tx,
+        data.productId,
+        data.destinationLocationId,
+        data.batchId,
+        data.quantity
+      );
+      return tx.stockMovement.create({
+        data: {
+          type: 'TRANSFERENCIA',
+          status: 'APROVADA',
+          productId: data.productId,
+          batchId: data.batchId,
+          quantity: data.quantity,
+          originLocationId: data.originLocationId,
+          destinationLocationId: data.destinationLocationId,
+          reason: data.reason,
+          notes: data.notes,
+          movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+          userId,
+          approvedById: userId,
+          approvedAt: new Date(),
+        },
+        include: movementInclude,
+      });
+    });
   }
-
-  static async approveTransfer(
+  static async approveMovement(
     id: string,
     approved: boolean,
     approverId: string,
     notes?: string
   ) {
     const movement = await prisma.stockMovement.findUnique({ where: { id } });
-    if (!movement || movement.type !== 'TRANSFERENCIA') {
-      throw new NotFoundError('Transferência não encontrada');
-    }
+    if (!movement) throw new NotFoundError('Movimentação não encontrada');
     if (movement.status !== 'PENDENTE') {
-      throw new ValidationError('Transferência já processada');
+      throw new ValidationError('Movimentação já processada');
     }
-
+    if (ENTRY_TYPES.includes(movement.type)) {
+      return this.approveEntry(movement, approved, approverId, notes);
+    }
+    if (EXIT_TYPES.includes(movement.type)) {
+      return this.approveExit(movement, approved, approverId, notes);
+    }
+    if (movement.type === 'TRANSFERENCIA') {
+      return this.finalizeTransfer(movement, approved, approverId, notes);
+    }
+    throw new ValidationError('Tipo de movimentação não suportado para aprovação');
+  }
+  /** @deprecated use approveMovement */
+  static async approveTransfer(
+    id: string,
+    approved: boolean,
+    approverId: string,
+    notes?: string
+  ) {
+    return this.approveMovement(id, approved, approverId, notes);
+  }
+  private static async rejectMovement(
+    id: string,
+    approverId: string,
+    notes: string | undefined,
+    currentNotes: string | null
+  ) {
+    return prisma.stockMovement.update({
+      where: { id },
+      data: {
+        status: 'REJEITADA',
+        approvedById: approverId,
+        approvedAt: new Date(),
+        notes: notes || currentNotes,
+      },
+      include: movementInclude,
+    });
+  }
+  private static async approveEntry(
+    movement: Prisma.StockMovementGetPayload<object>,
+    approved: boolean,
+    approverId: string,
+    notes?: string
+  ) {
     if (!approved) {
-      return prisma.stockMovement.update({
-        where: { id },
-        data: {
-          status: 'REJEITADA',
-          approvedById: approverId,
-          approvedAt: new Date(),
-          notes: notes || movement.notes,
-        },
+      return this.rejectMovement(movement.id, approverId, notes, movement.notes);
+    }
+    const meta = movement.metadata as PendingEntryMetadata | null;
+    if (!meta || meta.kind !== 'ENTRY' || !movement.destinationLocationId) {
+      throw new ValidationError('Dados da entrada pendente inválidos');
+    }
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const batch = await BatchService.findOrCreateForEntry(tx, {
+          productId: movement.productId,
+          stockLocationId: movement.destinationLocationId!,
+          batchNumber: meta.batchNumber,
+          expirationDate: new Date(meta.expirationDate),
+          manufacturingDate: new Date(meta.manufacturingDate),
+          quantity: movement.quantity,
+          supplierId: movement.supplierId ?? undefined,
+          unitCost: meta.unitPrice,
+          userId: movement.userId,
+        });
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.destinationLocationId!,
+          batch.id,
+          movement.quantity
+        );
+        await BatchService.syncBatchQuantity(batch.id, tx);
+        return tx.stockMovement.update({
+          where: { id: movement.id },
+          data: {
+            status: 'CONCLUIDA',
+            batchId: batch.id,
+            approvedById: approverId,
+            approvedAt: new Date(),
+            notes: notes || movement.notes,
+          },
+          include: movementInclude,
+        });
+      });
+      if (result.batchId) {
+        await BatchService.syncBatchAlerts(result.batchId);
+      }
+      return result;
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('validade')) {
+        throw new ValidationError(e.message);
+      }
+      throw e;
+    }
+  }
+  private static async approveExit(
+    movement: Prisma.StockMovementGetPayload<object>,
+    approved: boolean,
+    approverId: string,
+    notes?: string
+  ) {
+    if (!approved) {
+      return this.rejectMovement(movement.id, approverId, notes, movement.notes);
+    }
+    if (!movement.originLocationId) {
+      throw new ValidationError('Origem da saída não informada');
+    }
+    const exitData: ExitDTO = {
+      type: movement.type as ExitDTO['type'],
+      productId: movement.productId,
+      originLocationId: movement.originLocationId,
+      quantity: movement.quantity,
+      batchId: movement.batchId ?? undefined,
+      reason: movement.reason ?? undefined,
+      notes: movement.notes ?? undefined,
+    };
+    await this.assertExitStockAvailable(exitData);
+    if (exitData.batchId) {
+      return prisma.$transaction(async (tx) => {
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId!,
+          exitData.batchId,
+          -movement.quantity
+        );
+        await BatchService.syncBatchQuantity(exitData.batchId!, tx);
+        return tx.stockMovement.update({
+          where: { id: movement.id },
+          data: {
+            status: 'CONCLUIDA',
+            approvedById: approverId,
+            approvedAt: new Date(),
+            notes: notes || movement.notes,
+          },
+          include: movementInclude,
+        });
       });
     }
-
+    const fefoPlan = await BatchService.getFefoBatches(
+      movement.productId,
+      movement.originLocationId,
+      movement.quantity
+    );
+    return prisma.$transaction(async (tx) => {
+      let first = true;
+      let primary = null;
+      for (const slice of fefoPlan) {
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId!,
+          slice.batchId,
+          -slice.quantity
+        );
+        await BatchService.syncBatchQuantity(slice.batchId, tx);
+        if (first) {
+          primary = await tx.stockMovement.update({
+            where: { id: movement.id },
+            data: {
+              status: 'CONCLUIDA',
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              reason: movement.reason || `FEFO - Lote ${slice.batch.batchNumber}`,
+              approvedById: approverId,
+              approvedAt: new Date(),
+              notes: notes || movement.notes,
+            },
+            include: movementInclude,
+          });
+          first = false;
+        } else {
+          await tx.stockMovement.create({
+            data: {
+              type: movement.type,
+              status: 'CONCLUIDA',
+              productId: movement.productId,
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              originLocationId: movement.originLocationId!,
+              reason: movement.reason || `FEFO - Lote ${slice.batch.batchNumber}`,
+              notes: movement.notes,
+              movementDate: movement.movementDate,
+              userId: movement.userId,
+              approvedById: approverId,
+              approvedAt: new Date(),
+            },
+          });
+        }
+      }
+      return primary!;
+    });
+  }
+  private static async finalizeTransfer(
+    movement: Prisma.StockMovementGetPayload<object>,
+    approved: boolean,
+    approverId: string,
+    notes?: string
+  ) {
+    if (!approved) {
+      return this.rejectMovement(movement.id, approverId, notes, movement.notes);
+    }
     return prisma.$transaction(async (tx) => {
       await this.updateStockInTx(
         tx,
@@ -323,30 +626,21 @@ export class MovementService {
         movement.batchId,
         movement.quantity
       );
-
       return tx.stockMovement.update({
-        where: { id },
+        where: { id: movement.id },
         data: {
           status: 'APROVADA',
           approvedById: approverId,
           approvedAt: new Date(),
           notes: notes || movement.notes,
         },
-        include: {
-          product: true,
-          originLocation: true,
-          destinationLocation: true,
-          user: { select: { name: true } },
-          approvedBy: { select: { name: true } },
-        },
+        include: movementInclude,
       });
     });
   }
-
   static async list(filters: Record<string, string | undefined>) {
     const pagination = parsePagination(filters.page, filters.limit);
     const where: Prisma.StockMovementWhereInput = {};
-
     if (filters.type) where.type = filters.type as MovementType;
     if (filters.status) where.status = filters.status as MovementStatus;
     if (filters.productId) where.productId = filters.productId;
@@ -367,7 +661,6 @@ export class MovementService {
         { product: { name: { contains: filters.search, mode: 'insensitive' } } },
       ];
     }
-
     const [data, total] = await Promise.all([
       prisma.stockMovement.findMany({
         where,
@@ -386,10 +679,8 @@ export class MovementService {
       }),
       prisma.stockMovement.count({ where }),
     ]);
-
     return buildPaginatedResult(data, total, pagination);
   }
-
   static async findById(id: string) {
     const movement = await prisma.stockMovement.findUnique({
       where: { id },
@@ -406,11 +697,9 @@ export class MovementService {
     if (!movement) throw new NotFoundError('Movimentação não encontrada');
     return movement;
   }
-
   static getEntryTypes() {
     return ENTRY_TYPES;
   }
-
   static getExitTypes() {
     return EXIT_TYPES;
   }

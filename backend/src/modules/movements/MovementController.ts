@@ -18,15 +18,19 @@ export class MovementController {
     res.status(201).json({ success: true, data: result });
   }
 
-  static async approveTransfer(req: Request, res: Response): Promise<void> {
+  static async approveMovement(req: Request, res: Response): Promise<void> {
     const { approved, notes } = req.body;
-    const result = await MovementService.approveTransfer(
+    const result = await MovementService.approveMovement(
       getParam(req, 'id'),
       approved,
       req.user!.id,
       notes
     );
     res.json({ success: true, data: result });
+  }
+
+  static async approveTransfer(req: Request, res: Response): Promise<void> {
+    return MovementController.approveMovement(req, res);
   }
 
   static async list(req: Request, res: Response): Promise<void> {
