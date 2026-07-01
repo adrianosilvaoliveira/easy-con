@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/Badge';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { useAuthStore } from '@/stores/authStore';
-import { getRoleLabel, type AssignableRole } from '@/constants/roles';
+import { getRoleLabel, ASSIGNABLE_ROLES, type AssignableRole } from '@/constants/roles';
 import { UserAccessEditor } from '@/components/users/UserAccessEditor';
 
 interface UserListRecord {
@@ -60,7 +60,7 @@ export function UsersPage({ embedded = false }: UsersPageProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [active, setActive] = useState(true);
-  const [roleName, setRoleName] = useState<AssignableRole | 'ADMINISTRADOR'>('OPERACIONAL');
+  const [roleName, setRoleName] = useState<AssignableRole>('OPERACIONAL');
   const [useCustomAccess, setUseCustomAccess] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const queryClient = useQueryClient();
@@ -103,10 +103,8 @@ export function UsersPage({ embedded = false }: UsersPageProps) {
         password: '',
       });
       setActive(editingUser.active);
-      const role = editingUser.role.name as AssignableRole | 'ADMINISTRADOR';
-      setRoleName(
-        role === 'ADMINISTRADOR' || role === 'OPERACIONAL' ? role : 'OPERACIONAL'
-      );
+      const role = editingUser.role.name as AssignableRole;
+      setRoleName(ASSIGNABLE_ROLES.includes(role) ? role : 'OPERACIONAL');
       setUseCustomAccess(editingUser.useCustomAccess);
       setSelectedPermissions(
         editingUser.useCustomAccess

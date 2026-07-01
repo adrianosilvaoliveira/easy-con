@@ -13,6 +13,7 @@ datasource db {
 
 enum RoleName {
   ADMINISTRADOR
+  GERENCIA
   OPERACIONAL
   FARMACIA
   ESTOQUE

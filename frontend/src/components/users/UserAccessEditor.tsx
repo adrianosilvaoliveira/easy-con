@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { cn } from '@/utils/cn';
-import { getRoleLabel, type AssignableRole } from '@/constants/roles';
-import { OPERACIONAL_PERMISSIONS } from '@/constants/permissions';
+import { getRoleLabel, ROLE_SELECT_OPTIONS, type AssignableRole } from '@/constants/roles';
+import { ROLE_DEFAULT_PERMISSIONS, type NonAdminRole } from '@/constants/permissions';
 
 interface PermissionModule {
   module: string;
@@ -12,10 +12,10 @@ interface PermissionModule {
 }
 
 interface UserAccessEditorProps {
-  roleName: AssignableRole | 'ADMINISTRADOR';
+  roleName: AssignableRole;
   useCustomAccess: boolean;
   selectedPermissions: string[];
-  onRoleChange: (role: AssignableRole | 'ADMINISTRADOR') => void;
+  onRoleChange: (role: AssignableRole) => void;
   onUseCustomAccessChange: (value: boolean) => void;
   onPermissionsChange: (permissions: string[]) => void;
   disabled?: boolean;
@@ -40,11 +40,23 @@ export function UserAccessEditor({
           r.data.data as {
             modules: PermissionModule[];
             defaultOperacional: string[];
+            defaultGerencia: string[];
+            defaultByRole: Record<NonAdminRole, string[]>;
           }
       ),
   });
 
   const isAdmin = roleName === 'ADMINISTRADOR';
+  const nonAdminRole: NonAdminRole = roleName === 'GERENCIA' ? 'GERENCIA' : 'OPERACIONAL';
+
+  const roleDefaults = useMemo(() => {
+    return (
+      catalog?.defaultByRole?.[nonAdminRole] ??
+      (nonAdminRole === 'GERENCIA'
+        ? catalog?.defaultGerencia ?? [...ROLE_DEFAULT_PERMISSIONS.GERENCIA]
+        : catalog?.defaultOperacional ?? [...ROLE_DEFAULT_PERMISSIONS.OPERACIONAL])
+    );
+  }, [catalog, nonAdminRole]);
 
   useEffect(() => {
     if (isAdmin && useCustomAccess) {
@@ -71,9 +83,8 @@ export function UserAccessEditor({
     }
   };
 
-  const applyOperacionalDefaults = () => {
-    const defaults = catalog?.defaultOperacional ?? [...OPERACIONAL_PERMISSIONS];
-    onPermissionsChange([...defaults]);
+  const applyRoleDefaults = () => {
+    onPermissionsChange([...roleDefaults]);
     onUseCustomAccessChange(true);
   };
 
@@ -89,10 +100,13 @@ export function UserAccessEditor({
           className="input-field"
           value={roleName}
           disabled={disabled}
-          onChange={(e) => onRoleChange(e.target.value as AssignableRole | 'ADMINISTRADOR')}
+          onChange={(e) => onRoleChange(e.target.value as AssignableRole)}
         >
-          <option value="OPERACIONAL">{getRoleLabel('OPERACIONAL')}</option>
-          <option value="ADMINISTRADOR">{getRoleLabel('ADMINISTRADOR')}</option>
+          {ROLE_SELECT_OPTIONS.map((role) => (
+            <option key={role} value={role}>
+              {getRoleLabel(role)}
+            </option>
+          ))}
         </select>
         {isAdmin && (
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Administrador possui acesso total ao sistema.</p>
@@ -113,7 +127,7 @@ export function UserAccessEditor({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
               )}
             >
-              Perfil padrão ({getRoleLabel('OPERACIONAL')})
+              Perfil padrão ({getRoleLabel(nonAdminRole)})
             </button>
             <button
               type="button"
@@ -121,7 +135,7 @@ export function UserAccessEditor({
               onClick={() => {
                 onUseCustomAccessChange(true);
                 if (selectedPermissions.length === 0) {
-                  applyOperacionalDefaults();
+                  applyRoleDefaults();
                 }
               }}
               className={cn(
@@ -144,10 +158,10 @@ export function UserAccessEditor({
                 <button
                   type="button"
                   className="text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
-                  onClick={applyOperacionalDefaults}
+                  onClick={applyRoleDefaults}
                   disabled={disabled}
                 >
-                  Restaurar padrão operacional
+                  Restaurar padrão {getRoleLabel(nonAdminRole).toLowerCase()}
                 </button>
               </div>
 
@@ -215,8 +229,8 @@ export function UserAccessEditor({
 
           {!useCustomAccess && (
             <p className="text-xs text-slate-500">
-              Usa as permissões padrão do perfil Operacional. Ative &quot;Personalizado&quot; para
-              ajustar módulo a módulo.
+              Usa as permissões padrão do perfil {getRoleLabel(nonAdminRole)}. Ative &quot;Personalizado&quot;
+              para ajustar módulo a módulo.
             </p>
           )}
         </>

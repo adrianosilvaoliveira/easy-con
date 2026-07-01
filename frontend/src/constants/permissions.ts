@@ -22,3 +22,18 @@ export const OPERACIONAL_PERMISSIONS = [
   'batches:CREATE',
   'batches:UPDATE',
 ] as const;
+
+export const GERENCIA_PERMISSIONS = [
+  ...OPERACIONAL_PERMISSIONS,
+  'products:DELETE',
+  'stock:DELETE',
+  'batches:DELETE',
+  'audit:READ',
+] as const;
+
+export const ROLE_DEFAULT_PERMISSIONS = {
+  OPERACIONAL: OPERACIONAL_PERMISSIONS,
+  GERENCIA: GERENCIA_PERMISSIONS,
+} as const;
+
+export type NonAdminRole = keyof typeof ROLE_DEFAULT_PERMISSIONS;

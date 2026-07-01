@@ -5,7 +5,7 @@ import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagina
 import { Prisma, RoleName } from '@prisma/client';
 import type { createUserSchema, updateUserSchema } from './users.dto';
 import { z } from 'zod';
-import { ASSIGNABLE_ROLES, OPERACIONAL_PERMISSIONS } from '../../shared/constants/roles';
+import { ASSIGNABLE_ROLES, OPERACIONAL_PERMISSIONS, GERENCIA_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS } from '../../shared/constants/roles';
 import { MODULE_LABELS, ACTION_LABELS } from '../../shared/constants/permissionCatalog';
 import { resolvePermissionsFromUser } from '../../shared/utils/permissionResolver';
 
@@ -27,7 +27,7 @@ export class UserService {
   private static assertAssignableRole(roleName: RoleName, actor?: AuthActor) {
     this.assertCanManageUsers(actor);
     if (!ASSIGNABLE_ROLES.includes(roleName)) {
-      throw new ValidationError('Perfil inválido. Use Administrador ou Operacional.');
+      throw new ValidationError('Perfil inválido. Use Administrador, Gerência ou Operacional.');
     }
   }
 
@@ -77,6 +77,11 @@ export class UserService {
     return {
       modules: Object.values(byModule),
       defaultOperacional: [...OPERACIONAL_PERMISSIONS],
+      defaultGerencia: [...GERENCIA_PERMISSIONS],
+      defaultByRole: {
+        OPERACIONAL: [...ROLE_DEFAULT_PERMISSIONS.OPERACIONAL],
+        GERENCIA: [...ROLE_DEFAULT_PERMISSIONS.GERENCIA],
+      },
     };
   }
 
