@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../shared/errors/AppError';
 import { logger } from '../shared/logger';
+import { isPrismaConnectionError } from '../shared/utils/prismaErrors';
 
 export function errorHandler(
   err: Error,
@@ -31,12 +32,15 @@ export function errorHandler(
     });
     return;
   }
-  if (prismaCode === 'P2021' || prismaCode === 'P1001') {
+  if (isPrismaConnectionError(err)) {
+    const message =
+      prismaCode === 'P2021'
+        ? 'Banco de dados sem tabelas. Rode: cd backend && .\\scripts\\seed-vercel.ps1'
+        : 'Banco de dados indisponível. Tente novamente em instantes.';
     res.status(503).json({
       success: false,
       code: 'DATABASE_NOT_READY',
-      message:
-        'Banco de dados sem tabelas. Rode: cd backend && .\\scripts\\seed-vercel.ps1',
+      message,
     });
     return;
   }

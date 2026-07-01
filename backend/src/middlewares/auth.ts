@@ -3,6 +3,7 @@ import { UnauthorizedError, ForbiddenError } from '../shared/errors/AppError';
 import { JwtProvider } from '../providers/JwtProvider';
 import { prisma } from '../database/prisma';
 import { resolvePermissionsFromUser } from '../shared/utils/permissionResolver';
+import { isPrismaConnectionError } from '../shared/utils/prismaErrors';
 
 export async function authenticate(
   req: Request,
@@ -47,9 +48,13 @@ export async function authenticate(
   } catch (error) {
     if (error instanceof UnauthorizedError) {
       next(error);
-    } else {
-      next(new UnauthorizedError('Token inválido ou expirado'));
+      return;
     }
+    if (isPrismaConnectionError(error)) {
+      next(error);
+      return;
+    }
+    next(new UnauthorizedError('Token inválido ou expirado'));
   }
 }
 

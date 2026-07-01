@@ -16,7 +16,10 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-prisma.$connect().catch((err) => {
-  logger.error('Failed to connect to database', err);
-  process.exit(1);
-});
+/** Em serverless (Vercel), não encerra o processo — a conexão é lazy por requisição. */
+if (!process.env.VERCEL) {
+  prisma.$connect().catch((err) => {
+    logger.error('Failed to connect to database', err);
+    process.exit(1);
+  });
+}

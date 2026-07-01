@@ -11,6 +11,8 @@ import {
   TrendingUp,
   CalendarClock,
   Skull,
+  RefreshCw,
+  WifiOff,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -29,6 +31,8 @@ import { ExpirationBadge, ExpirationStatusType } from '@/components/expiration/E
 import { BarChart, Bar, ResponsiveContainer } from 'recharts';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { DashboardMetrics, EntriesExitsChartData, StockMovement } from '@/types';
 import { ChartPeriodFilter, type ChartPeriod } from '@/components/dashboard/ChartPeriodFilter';
 import { formatDate, formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
@@ -94,9 +98,14 @@ export function DashboardPage() {
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
   const [alertsModalOpen, setAlertsModalOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api.get<{ data: DashboardMetrics }>('/dashboard').then((r) => r.data.data),
+    retry: (failureCount, err) => {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 401 || status === 403 || status === 503) return false;
+      return failureCount < 1;
+    },
   });
 
   const { data: chartResponse, isLoading: chartLoading } = useQuery({
@@ -116,7 +125,7 @@ export function DashboardPage() {
 
   const pendingAlertsCount = expMetrics?.counts?.alertsCount ?? 0;
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className="page-content">
         <PageHeader title="Dashboard" />
@@ -129,7 +138,36 @@ export function DashboardPage() {
     );
   }
 
-  const metrics = data!;
+  if (isError || !data) {
+    const ax = error as {
+      code?: string;
+      response?: { status?: number; data?: { message?: string } };
+    };
+    const message =
+      ax.response?.data?.message ??
+      (ax.code === 'ECONNABORTED'
+        ? 'Servidor demorou para responder. Tente novamente.'
+        : 'Não foi possível carregar os indicadores do dashboard.');
+
+    return (
+      <div className="page-content">
+        <PageHeader title="Dashboard" />
+        <EmptyState
+          icon={WifiOff}
+          title="Falha ao carregar o dashboard"
+          description={message}
+          action={
+            <Button variant="secondary" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const metrics = data;
 
   return (
     <div className="page-content">

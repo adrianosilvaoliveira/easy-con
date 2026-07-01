@@ -66,7 +66,12 @@ export class AuthService {
   }
 
   static async refresh(refreshToken: string) {
-    const payload = JwtProvider.verifyRefreshToken(refreshToken);
+    let payload: ReturnType<typeof JwtProvider.verifyRefreshToken>;
+    try {
+      payload = JwtProvider.verifyRefreshToken(refreshToken);
+    } catch {
+      throw new UnauthorizedError('Refresh token inválido ou expirado');
+    }
 
     const stored = await prisma.refreshToken.findFirst({
       where: { token: refreshToken, userId: payload.sub, revoked: false },
