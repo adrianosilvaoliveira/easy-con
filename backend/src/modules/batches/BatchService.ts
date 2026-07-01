@@ -20,6 +20,39 @@ type CreateBatchDTO = z.infer<typeof createBatchSchema>;
 type UpdateBatchDTO = z.infer<typeof updateBatchSchema>;
 
 export class BatchService {
+  private static startOfToday(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+
+  private static enrichBatch<T extends { expirationDate: Date }>(batch: T) {
+    return {
+      ...batch,
+      status: calculateExpirationStatus(batch.expirationDate),
+      daysUntilExpiration: daysUntilExpiration(batch.expirationDate),
+    };
+  }
+
+  private static expirationRangeForStatus(status: ExpirationStatus): Prisma.DateTimeFilter {
+    const today = this.startOfToday();
+    const in30 = new Date(today);
+    in30.setDate(in30.getDate() + 30);
+    const in90 = new Date(today);
+    in90.setDate(in90.getDate() + 90);
+
+    switch (status) {
+      case 'EXPIRED':
+        return { lt: today };
+      case 'CRITICAL':
+        return { gte: today, lte: in30 };
+      case 'WARNING':
+        return { gt: in30, lte: in90 };
+      default:
+        return { gt: in90 };
+    }
+  }
+
   static buildWhere(filters: Record<string, string | undefined>): Prisma.ProductBatchWhereInput {
     const where: Prisma.ProductBatchWhereInput = {};
 
@@ -27,7 +60,9 @@ export class BatchService {
     if (filters.stockLocationId) where.stockLocationId = filters.stockLocationId;
     if (filters.supplierId) where.supplierId = filters.supplierId;
     if (filters.batchNumber) where.batchNumber = { contains: filters.batchNumber, mode: 'insensitive' };
-    if (filters.status) where.status = filters.status as ExpirationStatus;
+    if (filters.status) {
+      where.expirationDate = this.expirationRangeForStatus(filters.status as ExpirationStatus);
+    }
     const productWhere: Prisma.ProductWhereInput = {};
     if (filters.categoryId) productWhere.categoryId = filters.categoryId;
     if (filters.includeInactive !== 'true') productWhere.active = true;
@@ -40,10 +75,10 @@ export class BatchService {
     }
 
     if (filters.expiringDays) {
-      const limit = new Date();
+      const today = this.startOfToday();
+      const limit = new Date(today);
       limit.setDate(limit.getDate() + Number(filters.expiringDays));
-      where.expirationDate = { lte: limit, gte: new Date() };
-      where.status = { not: 'EXPIRED' };
+      where.expirationDate = { gte: today, lte: limit };
     }
 
     if (filters.search) {
@@ -81,7 +116,7 @@ export class BatchService {
     ]);
 
     return buildPaginatedResult(
-      data.map((b) => ({ ...b, daysUntilExpiration: daysUntilExpiration(b.expirationDate) })),
+      data.map((b) => this.enrichBatch(b)),
       total,
       pagination
     );
@@ -93,11 +128,12 @@ export class BatchService {
 
   static async listExpired(filters: Record<string, string | undefined> = {}) {
     const pagination = parsePagination(filters.page, filters.limit);
+    const baseWhere = this.buildWhere(filters);
+    delete (baseWhere as { status?: unknown }).status;
     const where: Prisma.ProductBatchWhereInput = {
-      status: 'EXPIRED',
-      ...this.buildWhere(filters),
+      ...baseWhere,
+      expirationDate: { lt: this.startOfToday() },
     };
-    delete (where as { quantity?: unknown }).quantity;
 
     const [data, total] = await Promise.all([
       prisma.productBatch.findMany({
@@ -110,7 +146,7 @@ export class BatchService {
       prisma.productBatch.count({ where }),
     ]);
 
-    return buildPaginatedResult(data, total, pagination);
+    return buildPaginatedResult(data.map((b) => this.enrichBatch(b)), total, pagination);
   }
 
   static async findById(id: string) {
@@ -127,7 +163,7 @@ export class BatchService {
       },
     });
     if (!batch) throw new NotFoundError('Lote não encontrado');
-    return { ...batch, daysUntilExpiration: daysUntilExpiration(batch.expirationDate) };
+    return this.enrichBatch(batch);
   }
 
   static async create(data: CreateBatchDTO, userId: string) {
@@ -274,10 +310,12 @@ export class BatchService {
 
   static async syncBatchAlerts(batchId: string) {
     const batch = await prisma.productBatch.findUnique({ where: { id: batchId } });
-    if (!batch || batch.quantity <= 0) return;
+    if (!batch) return;
 
     const status = calculateExpirationStatus(batch.expirationDate);
     await prisma.productBatch.update({ where: { id: batchId }, data: { status } });
+
+    if (batch.quantity <= 0) return;
 
     const types = getApplicableAlertTypes(batch.expirationDate);
     for (const alertType of types) {
@@ -296,28 +334,42 @@ export class BatchService {
   }
 
   static async getDashboardMetrics() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = this.startOfToday();
 
-    const [expired, critical, warning, valid, alertsCount, batches] = await Promise.all([
-      prisma.productBatch.count({ where: { status: 'EXPIRED', quantity: { gt: 0 } } }),
-      prisma.productBatch.count({ where: { status: 'CRITICAL', quantity: { gt: 0 } } }),
-      prisma.productBatch.count({ where: { status: 'WARNING', quantity: { gt: 0 } } }),
-      prisma.productBatch.count({ where: { status: 'VALID', quantity: { gt: 0 } } }),
+    const [alertsCount, batches, criticalBatchesRaw] = await Promise.all([
       AlertService.countActive(),
       prisma.productBatch.findMany({
-        where: { quantity: { gt: 0 } },
         select: {
           expirationDate: true,
           quantity: true,
           unitCost: true,
-          status: true,
+        },
+      }),
+      prisma.productBatch.findMany({
+        where: { expirationDate: { lte: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000) } },
+        take: 20,
+        orderBy: { expirationDate: 'asc' },
+        include: {
+          product: { select: { name: true, internalCode: true } },
+          stockLocation: { select: { name: true } },
         },
       }),
     ]);
 
+    const counts = { expired: 0, critical: 0, warning: 0, valid: 0 };
+    const statusKey: Record<ExpirationStatus, keyof typeof counts> = {
+      EXPIRED: 'expired',
+      CRITICAL: 'critical',
+      WARNING: 'warning',
+      VALID: 'valid',
+    };
+    for (const batch of batches) {
+      const status = calculateExpirationStatus(batch.expirationDate);
+      counts[statusKey[status]]++;
+    }
+
     const financialLoss = batches
-      .filter((b) => b.status === 'EXPIRED')
+      .filter((b) => calculateExpirationStatus(b.expirationDate) === 'EXPIRED')
       .reduce((sum, b) => sum + b.quantity * Number(b.unitCost || 0), 0);
 
     const monthMap = new Map<string, number>();
@@ -329,7 +381,7 @@ export class BatchService {
     }
 
     batches.forEach((b) => {
-      if (b.status === 'EXPIRED') return;
+      if (calculateExpirationStatus(b.expirationDate) === 'EXPIRED') return;
       const key = `${b.expirationDate.getFullYear()}-${String(b.expirationDate.getMonth() + 1).padStart(2, '0')}`;
       if (monthMap.has(key)) monthMap.set(key, (monthMap.get(key) || 0) + b.quantity);
     });
@@ -339,18 +391,13 @@ export class BatchService {
       count,
     }));
 
-    const criticalBatches = await prisma.productBatch.findMany({
-      where: { status: { in: ['CRITICAL', 'EXPIRED'] }, quantity: { gt: 0 } },
-      take: 10,
-      orderBy: { expirationDate: 'asc' },
-      include: {
-        product: { select: { name: true, internalCode: true } },
-        stockLocation: { select: { name: true } },
-      },
-    });
+    const criticalBatches = criticalBatchesRaw
+      .map((b) => this.enrichBatch(b))
+      .filter((b) => b.status === 'CRITICAL' || b.status === 'EXPIRED')
+      .slice(0, 10);
 
     return {
-      counts: { expired, critical, warning, valid, alertsCount },
+      counts: { ...counts, alertsCount },
       financialLoss,
       expiringByMonth,
       criticalBatches,
@@ -358,9 +405,7 @@ export class BatchService {
   }
 
   static async runExpirationJob() {
-    const batches = await prisma.productBatch.findMany({
-      where: { quantity: { gt: 0 } },
-    });
+    const batches = await prisma.productBatch.findMany();
 
     let updated = 0;
     for (const batch of batches) {
@@ -369,7 +414,9 @@ export class BatchService {
         await prisma.productBatch.update({ where: { id: batch.id }, data: { status } });
         updated++;
       }
-      await this.syncBatchAlerts(batch.id);
+      if (batch.quantity > 0) {
+        await this.syncBatchAlerts(batch.id);
+      }
     }
 
     return { processed: batches.length, statusUpdated: updated };
@@ -393,7 +440,7 @@ export class BatchService {
 
     for (const item of items) {
       if (!item.batch || remaining <= 0) break;
-      if (item.batch.status === 'EXPIRED') continue;
+      if (calculateExpirationStatus(item.batch.expirationDate) === 'EXPIRED') continue;
       const take = Math.min(item.quantity, remaining);
       if (take > 0) {
         plan.push({ batchId: item.batchId!, quantity: take, batch: item.batch });
