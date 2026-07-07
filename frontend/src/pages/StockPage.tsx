@@ -1,12 +1,13 @@
-import { useState, useMemo, type KeyboardEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, MapPin, Search, X, Pencil, Plus } from 'lucide-react';
+import { useState, useMemo, useEffect, type KeyboardEvent } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { Boxes, MapPin, Search, X, Pencil, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import { ProductFormModal } from '@/components/products/ProductFormModal';
+import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import type { StockLocation, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
@@ -21,8 +22,16 @@ export function StockPage() {
   const [search, setSearch] = useState('');
   const [locationId, setLocationId] = useState('');
   const [batch, setBatch] = useState('');
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const [page, setPage] = useState(1);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+  const PAGE_SIZE = 100;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, locationId, batch, includeInactive]);
 
   const { data: locations, isLoading: loadingLoc } = useQuery({
     queryKey: ['stock-locations'],
@@ -30,7 +39,7 @@ export function StockPage() {
   });
 
   const { data: items, isLoading: loadingItems } = useQuery({
-    queryKey: ['stock-items', search, locationId, batch],
+    queryKey: ['stock-items', search, locationId, batch, includeInactive, page],
     queryFn: () =>
       api
         .get('/stock/items', {
@@ -38,13 +47,19 @@ export function StockPage() {
             search: search.trim() || undefined,
             locationId: locationId || undefined,
             batch: batch.trim() || undefined,
-            limit: 100,
+            includeInactive: includeInactive ? 'true' : undefined,
+            page,
+            limit: PAGE_SIZE,
           },
         })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const total = items?.meta?.total;
+  const totalPages = items?.meta?.totalPages ?? 1;
+  const hasPrev = items?.meta?.hasPrev ?? false;
+  const hasNext = items?.meta?.hasNext ?? false;
 
   const selectedLocation = useMemo(
     () => locations?.find((loc) => loc.id === locationId),
@@ -222,12 +237,19 @@ export function StockPage() {
             />
           </div>
         </div>
-        {typeof total === 'number' && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {total} registro(s) encontrado(s)
-            {total > 100 ? ' — exibindo os primeiros 100' : ''}
-          </p>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {typeof total === 'number' ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {total} registro(s) encontrado(s)
+              {total > PAGE_SIZE
+                ? ` — exibindo ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)}`
+                : ''}
+            </p>
+          ) : (
+            <span />
+          )}
+          <IncludeInactiveFilter checked={includeInactive} onChange={setIncludeInactive} />
+        </div>
       </div>
 
       <DataTable<StockItem>
@@ -237,7 +259,18 @@ export function StockPage() {
         emptyTitle="Nenhum item encontrado"
         emptyDescription="Ajuste os filtros ou cadastre entradas de estoque."
         columns={[
-          { key: 'product', header: 'Produto', render: (i) => formatProductName(i.product.name) },
+          {
+            key: 'product',
+            header: 'Produto',
+            render: (i) => (
+              <span className="flex items-center gap-2">
+                {formatProductName(i.product.name)}
+                {i.product.active === false && (
+                  <Badge variant="default">Inativo</Badge>
+                )}
+              </span>
+            ),
+          },
           { key: 'code', header: 'Código', render: (i) => i.product.internalCode },
           { key: 'location', header: 'Local', render: (i) => i.location.name },
           { key: 'lot', header: 'Lote', render: (i) => i.batch?.batchNumber || '-' },
@@ -266,6 +299,32 @@ export function StockPage() {
             : []),
         ]}
       />
+
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Página {page} de {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!hasPrev || loadingItems}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="h-4 w-4" /> Anterior
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!hasNext || loadingItems}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próxima <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {(canCreateProduct || canEditProduct) && (
         <ProductFormModal

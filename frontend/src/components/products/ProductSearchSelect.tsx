@@ -199,7 +199,7 @@ export function ProductSearchSelect({
                           setProductModalOpen(true);
                         }}
                       >
-                        + Cadastrar &quot;{query.trim()}&quot;
+                        + Cadastrar novo produto
                       </button>
                     )}
                   </>
@@ -235,7 +235,6 @@ export function ProductSearchSelect({
         open={productModalOpen}
         onClose={() => setProductModalOpen(false)}
         onSuccess={handleCreated}
-        initialName={query.trim()}
       />
     </>
   );

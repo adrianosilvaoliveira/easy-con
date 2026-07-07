@@ -170,14 +170,20 @@ export class StockService {
     if (filters.batch?.trim()) {
       where.batch = { batchNumber: { contains: filters.batch.trim(), mode: 'insensitive' } };
     }
+
+    const productWhere: Prisma.ProductWhereInput = {};
+    if (filters.includeInactive !== 'true') {
+      productWhere.active = true;
+    }
     if (filters.search) {
-      where.product = {
-        OR: [
-          { name: { contains: filters.search, mode: 'insensitive' } },
-          { internalCode: { contains: filters.search, mode: 'insensitive' } },
-          { barcode: { contains: filters.search, mode: 'insensitive' } },
-        ],
-      };
+      productWhere.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { internalCode: { contains: filters.search, mode: 'insensitive' } },
+        { barcode: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+    if (Object.keys(productWhere).length > 0) {
+      where.product = productWhere;
     }
 
     const [data, total] = await Promise.all([

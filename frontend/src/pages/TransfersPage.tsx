@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus, ArrowLeftRight } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
   MovementApprovalActions,
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
+import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 
 const transferSchema = z.object({
   type: z.literal('TRANSFERENCIA'),
@@ -30,11 +31,6 @@ const transferSchema = z.object({
 export function TransfersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const queryClient = useQueryClient();
-
-  const { data: products } = useQuery({
-    queryKey: ['products-list'],
-    queryFn: () => api.get('/products', { params: { limit: 200 } }).then((r) => r.data.data),
-  });
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -51,9 +47,15 @@ export function TransfersPage() {
         .then((r) => r.data),
   });
 
-  const { register, handleSubmit, reset } = useForm<z.infer<typeof transferSchema>>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    control,
+    formState: { errors },
+  } = useForm<z.infer<typeof transferSchema>>({
     resolver: zodResolver(transferSchema),
-    defaultValues: { type: 'TRANSFERENCIA' },
+    defaultValues: { type: 'TRANSFERENCIA', productId: '' },
   });
 
   const createMutation = useMutation({
@@ -101,11 +103,7 @@ export function TransfersPage() {
             key: 'actions',
             header: 'Ações',
             render: (m) => (
-              <MovementApprovalActions
-                movementId={m.id}
-                status={m.status}
-                invalidateKeys={['transfers']}
-              />
+              <MovementApprovalActions movement={m} invalidateKeys={['transfers']} />
             ),
           },
         ]}
@@ -114,13 +112,18 @@ export function TransfersPage() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Transferência" size="lg">
         <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="form-label">Produto</label>
-            <select className="input-field" {...register('productId')}>
-              <option value="">Selecione...</option>
-              {products?.map((p: { id: string; name: string; internalCode: string }) => (
-                <option key={p.id} value={p.id}>{p.internalCode} - {p.name}</option>
-              ))}
-            </select>
+            <Controller
+              name="productId"
+              control={control}
+              render={({ field }) => (
+                <ProductSearchSelect
+                  value={field.value}
+                  onChange={(id) => field.onChange(id)}
+                  error={errors.productId?.message}
+                  required
+                />
+              )}
+            />
           </div>
           <div>
             <label className="form-label">Origem</label>

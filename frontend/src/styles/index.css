@@ -4,11 +4,13 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --color-surface: 255 255 255;
     --color-surface-muted: 226 232 240;
     --color-surface-border: 203 213 225;
   }
   .dark {
+    color-scheme: dark;
     --color-surface: 30 41 59;
     --color-surface-muted: 15 23 42;
     --color-surface-border: 71 85 105;

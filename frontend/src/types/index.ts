@@ -91,6 +91,12 @@ export interface StockMovement {
   user: { id: string; name: string };
   invoiceNumber?: string;
   reason?: string;
+  notes?: string | null;
+  supplier?: { id: string; name: string } | null;
+  batch?: { id: string; batchNumber: string; expirationDate?: string } | null;
+  approvedBy?: { id: string; name: string } | null;
+  approvedAt?: string | null;
+  createdAt?: string;
 }
 
 export interface DashboardMetrics {

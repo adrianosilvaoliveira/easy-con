@@ -189,11 +189,7 @@ export function EntriesPage() {
             key: 'actions',
             header: 'Ações',
             render: (m) => (
-              <MovementApprovalActions
-                movementId={m.id}
-                status={m.status}
-                invalidateKeys={['entries']}
-              />
+              <MovementApprovalActions movement={m} invalidateKeys={['entries']} />
             ),
           },
         ]}

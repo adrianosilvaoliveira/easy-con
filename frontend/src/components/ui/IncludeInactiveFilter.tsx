@@ -19,7 +19,7 @@ export function IncludeInactiveFilter({
         onChange={(e) => onChange(e.target.checked)}
         className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
       />
-      Incluir inativos
+      Mostrar inativos
     </label>
   );
 }

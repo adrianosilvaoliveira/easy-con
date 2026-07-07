@@ -99,11 +99,7 @@ export function ExitsPage() {
             key: 'actions',
             header: 'Ações',
             render: (m) => (
-              <MovementApprovalActions
-                movementId={m.id}
-                status={m.status}
-                invalidateKeys={['exits']}
-              />
+              <MovementApprovalActions movement={m} invalidateKeys={['exits']} />
             ),
           },
         ]}
