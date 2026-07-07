@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, X, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { formatProductName } from '@/utils/format';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/services/api';
 import { ProductFormModal, type CreatedProduct } from './ProductFormModal';
 
@@ -59,15 +60,16 @@ export function ProductSearchSelect({
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selected, setSelected] = useState<ProductOption | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const debouncedQuery = useDebounce(query, 300);
 
   const { data: products = [], isFetching } = useQuery({
-    queryKey: ['products-search', query],
+    queryKey: ['products-search', debouncedQuery],
     queryFn: () =>
       api
-        .get('/products', { params: { search: query.trim() || undefined, limit: 40 } })
+        .get('/products', { params: { search: debouncedQuery.trim() || undefined, limit: 40 } })
         .then((r) => r.data.data as ProductOption[]),
-    enabled: open || !!query,
-    staleTime: 30_000,
+    enabled: open || !!debouncedQuery,
+    staleTime: 60_000,
   });
 
   const ranked = useMemo(() => {

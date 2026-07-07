@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
 import { formatProductName } from '@/utils/format';
 import { useAuthStore } from '@/stores/authStore';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export function StockPage() {
   const queryClient = useQueryClient();
@@ -29,9 +30,12 @@ export function StockPage() {
 
   const PAGE_SIZE = 100;
 
+  const debouncedSearch = useDebounce(search, 350);
+  const debouncedBatch = useDebounce(batch, 350);
+
   useEffect(() => {
     setPage(1);
-  }, [search, locationId, batch, includeInactive]);
+  }, [debouncedSearch, locationId, debouncedBatch, includeInactive]);
 
   const { data: locations, isLoading: loadingLoc } = useQuery({
     queryKey: ['stock-locations'],
@@ -39,14 +43,14 @@ export function StockPage() {
   });
 
   const { data: items, isLoading: loadingItems } = useQuery({
-    queryKey: ['stock-items', search, locationId, batch, includeInactive, page],
+    queryKey: ['stock-items', debouncedSearch, locationId, debouncedBatch, includeInactive, page],
     queryFn: () =>
       api
         .get('/stock/items', {
           params: {
-            search: search.trim() || undefined,
+            search: debouncedSearch.trim() || undefined,
             locationId: locationId || undefined,
-            batch: batch.trim() || undefined,
+            batch: debouncedBatch.trim() || undefined,
             includeInactive: includeInactive ? 'true' : undefined,
             page,
             limit: PAGE_SIZE,

@@ -19,9 +19,13 @@ export class SupplierService {
       }),
     };
 
+    const parsedLimit = Number(filters.limit);
+    const take = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 200) : undefined;
+
     return prisma.supplier.findMany({
       where,
       orderBy: { name: 'asc' },
+      ...(take ? { take } : {}),
     });
   }
 

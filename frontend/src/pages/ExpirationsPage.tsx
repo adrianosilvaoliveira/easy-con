@@ -14,6 +14,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatDate, formatProductName } from '@/utils/format';
 import { useAuthStore } from '@/stores/authStore';
+import { useDebounce } from '@/hooks/useDebounce';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { Controller } from 'react-hook-form';
@@ -51,17 +52,18 @@ export function ExpirationsPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const debouncedSearch = useDebounce(search, 350);
 
   const endpoint =
     tab === 'expired' ? '/batches/expired' : tab === 'expiring' ? '/batches/expiring?days=90' : '/batches';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['batches', tab, search, statusFilter],
+    queryKey: ['batches', tab, debouncedSearch, statusFilter, includeInactive],
     queryFn: () =>
       api
         .get(endpoint, {
           params: {
-            search,
+            search: debouncedSearch,
             status: statusFilter || undefined,
             includeInactive: includeInactive ? 'true' : undefined,
             limit: 100,

@@ -17,6 +17,7 @@ import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { useAuthStore } from '@/stores/authStore';
 import { getRoleLabel, ASSIGNABLE_ROLES, type AssignableRole } from '@/constants/roles';
 import { UserAccessEditor } from '@/components/users/UserAccessEditor';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface UserListRecord {
   id: string;
@@ -64,14 +65,15 @@ export function UsersPage({ embedded = false }: UsersPageProps) {
   const [useCustomAccess, setUseCustomAccess] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const queryClient = useQueryClient();
+  const debouncedSearch = useDebounce(search, 350);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', search, includeInactive],
+    queryKey: ['users', debouncedSearch, includeInactive],
     queryFn: () =>
       api
         .get('/users', {
           params: {
-            search: search || undefined,
+            search: debouncedSearch || undefined,
             includeInactive: includeInactive ? 'true' : undefined,
             limit: 100,
           },

@@ -83,14 +83,18 @@ export function ProductFormModal({
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
     queryFn: () =>
-      api.get('/suppliers', { params: { includeInactive: 'false' } }).then((r) => r.data.data),
+      api
+        .get('/suppliers', { params: { includeInactive: 'false', limit: 200 } })
+        .then((r) => r.data.data),
     enabled: open,
+    staleTime: 60_000,
   });
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
     queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
     enabled: open,
+    staleTime: 60_000,
   });
 
   const { data: product, isLoading: loadingProduct } = useQuery({

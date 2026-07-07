@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, X, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/services/api';
 import { SupplierFormModal, type CreatedSupplier } from './SupplierFormModal';
 
@@ -63,15 +64,16 @@ export function SupplierSearchSelect({
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState<SupplierOption | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const debouncedQuery = useDebounce(query, 300);
 
   const { data: suppliers = [], isFetching } = useQuery({
-    queryKey: ['suppliers-search', query],
+    queryKey: ['suppliers-search', debouncedQuery],
     queryFn: () =>
       api
-        .get('/suppliers', { params: { search: query.trim() || undefined } })
+        .get('/suppliers', { params: { search: debouncedQuery.trim() || undefined, limit: 30 } })
         .then((r) => r.data.data as SupplierOption[]),
-    enabled: open || !!query || !!value,
-    staleTime: 30_000,
+    enabled: open || !!debouncedQuery || !!value,
+    staleTime: 60_000,
   });
 
   const ranked = useMemo(() => {

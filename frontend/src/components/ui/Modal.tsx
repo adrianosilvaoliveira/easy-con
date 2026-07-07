@@ -35,7 +35,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
       <div className={cn('relative w-full max-h-[90vh] overflow-hidden rounded-t-2xl bg-white shadow-elevated dark:bg-slate-800 dark:shadow-none sm:max-h-[85vh] sm:rounded-2xl', sizes[size])}>
         <div className="flex items-center justify-between border-b border-surface-border px-6 py-4 dark:border-slate-600">
           <h2 id="modal-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
