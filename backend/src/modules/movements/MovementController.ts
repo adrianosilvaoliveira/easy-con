@@ -42,4 +42,9 @@ export class MovementController {
     const result = await MovementService.findById(getParam(req, 'id'));
     res.json({ success: true, data: result });
   }
+
+  static async delete(req: Request, res: Response): Promise<void> {
+    const result = await MovementService.delete(getParam(req, 'id'));
+    res.json({ success: true, data: result });
+  }
 }

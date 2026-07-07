@@ -697,6 +697,87 @@ export class MovementService {
     if (!movement) throw new NotFoundError('Movimentação não encontrada');
     return movement;
   }
+
+  static async delete(id: string) {
+    const movement = await prisma.stockMovement.findUnique({ where: { id } });
+    if (!movement) throw new NotFoundError('Movimentação não encontrada');
+
+    const reversible = movement.status === 'CONCLUIDA' || movement.status === 'APROVADA';
+    const removable = movement.status === 'PENDENTE' || movement.status === 'REJEITADA';
+
+    if (!reversible && !removable) {
+      throw new ValidationError('Esta movimentação não pode ser excluída');
+    }
+
+    if (removable) {
+      await prisma.stockMovement.delete({ where: { id } });
+      return { message: 'Movimentação excluída' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (ENTRY_TYPES.includes(movement.type)) {
+        if (!movement.destinationLocationId) {
+          throw new ValidationError('Destino da entrada não informado');
+        }
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.destinationLocationId,
+          movement.batchId,
+          -movement.quantity
+        );
+        if (movement.batchId) {
+          await BatchService.syncBatchQuantity(movement.batchId, tx);
+        }
+      } else if (EXIT_TYPES.includes(movement.type)) {
+        if (!movement.originLocationId) {
+          throw new ValidationError('Origem da saída não informada');
+        }
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId,
+          movement.batchId,
+          movement.quantity
+        );
+        if (movement.batchId) {
+          await BatchService.syncBatchQuantity(movement.batchId, tx);
+        }
+      } else if (movement.type === 'TRANSFERENCIA') {
+        if (!movement.originLocationId || !movement.destinationLocationId) {
+          throw new ValidationError('Origem ou destino da transferência não informado');
+        }
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId,
+          movement.batchId,
+          movement.quantity
+        );
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.destinationLocationId,
+          movement.batchId,
+          -movement.quantity
+        );
+        if (movement.batchId) {
+          await BatchService.syncBatchQuantity(movement.batchId, tx);
+        }
+      } else {
+        throw new ValidationError('Tipo de movimentação não suportado para exclusão');
+      }
+
+      await tx.stockMovement.delete({ where: { id } });
+    });
+
+    if (movement.batchId) {
+      await BatchService.syncBatchAlerts(movement.batchId);
+    }
+
+    return { message: 'Movimentação excluída e estoque estornado' };
+  }
+
   static getEntryTypes() {
     return ENTRY_TYPES;
   }

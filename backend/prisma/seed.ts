@@ -71,6 +71,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'movements:READ',
     'movements:CREATE',
     'movements:APPROVE',
+    'movements:DELETE',
     'inventory:READ',
     'inventory:CREATE',
     'inventory:UPDATE',

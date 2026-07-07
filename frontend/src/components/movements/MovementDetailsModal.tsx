@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/stores/authStore';
@@ -10,7 +10,7 @@ import {
   formatProductName,
   movementTypeLabel,
 } from '@/utils/format';
-import { MovementStatusBadge, useApproveMovement } from './MovementApprovalActions';
+import { MovementStatusBadge, useApproveMovement, useDeleteMovement } from './MovementApprovalActions';
 
 interface MovementDetailsModalProps {
   open: boolean;
@@ -41,11 +41,22 @@ export function MovementDetailsModal({
 }: MovementDetailsModalProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const approveMutation = useApproveMovement(movement.id, invalidateKeys);
+  const deleteMutation = useDeleteMovement(movement.id, invalidateKeys);
 
   const canApprove = movement.status === 'PENDENTE' && hasPermission('movements:APPROVE');
+  const canDelete = hasPermission('movements:DELETE');
 
   const handleApprove = (approved: boolean) => {
     approveMutation.mutate({ approved }, { onSuccess: onClose });
+  };
+
+  const handleDelete = () => {
+    const reversible = movement.status === 'CONCLUIDA' || movement.status === 'APROVADA';
+    const message = reversible
+      ? 'Excluir esta movimentação e estornar o estoque? Esta ação não pode ser desfeita.'
+      : 'Excluir esta movimentação? Esta ação não pode ser desfeita.';
+    if (!window.confirm(message)) return;
+    deleteMutation.mutate(undefined, { onSuccess: onClose });
   };
 
   return (
@@ -90,6 +101,17 @@ export function MovementDetailsModal({
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-surface-border pt-4 dark:border-slate-700">
+          {canDelete && (
+            <Button
+              variant="danger"
+              type="button"
+              className="mr-auto"
+              loading={deleteMutation.isPending}
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4" /> Excluir
+            </Button>
+          )}
           <Button variant="secondary" type="button" onClick={onClose}>
             Fechar
           </Button>

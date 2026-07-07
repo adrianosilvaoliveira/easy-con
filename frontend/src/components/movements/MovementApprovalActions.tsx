@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, X, Eye } from 'lucide-react';
+import { Check, X, Eye, Trash2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/services/api';
@@ -24,6 +24,13 @@ export function MovementStatusBadge({ status }: { status: string }) {
   );
 }
 
+function invalidateMovementQueries(queryClient: ReturnType<typeof useQueryClient>, keys: string[]) {
+  keys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  queryClient.invalidateQueries({ queryKey: ['stock'] });
+  queryClient.invalidateQueries({ queryKey: ['batches'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+}
+
 /** Hook compartilhado para aprovar/rejeitar uma movimentação. */
 export function useApproveMovement(movementId: string, invalidateKeys: string[] = []) {
   const queryClient = useQueryClient();
@@ -33,13 +40,25 @@ export function useApproveMovement(movementId: string, invalidateKeys: string[] 
       api.patch(`/movements/${movementId}/approve`, { approved }),
     onSuccess: (_, { approved }) => {
       toast.success(approved ? 'Movimentação aprovada e efetivada' : 'Movimentação rejeitada');
-      invalidateKeys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
-      queryClient.invalidateQueries({ queryKey: ['stock'] });
-      queryClient.invalidateQueries({ queryKey: ['batches'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      invalidateMovementQueries(queryClient, invalidateKeys);
     },
     onError: (err: { response?: { data?: { message?: string } } }) =>
       toast.error(err.response?.data?.message || 'Erro ao processar movimentação'),
+  });
+}
+
+/** Hook compartilhado para excluir uma movimentação (adm/gerência). */
+export function useDeleteMovement(movementId: string, invalidateKeys: string[] = []) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.delete(`/movements/${movementId}`),
+    onSuccess: (res) => {
+      toast.success(res.data?.data?.message || 'Movimentação excluída');
+      invalidateMovementQueries(queryClient, invalidateKeys);
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err.response?.data?.message || 'Erro ao excluir movimentação'),
   });
 }
 
@@ -55,8 +74,19 @@ export function MovementApprovalActions({
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const approveMutation = useApproveMovement(movement.id, invalidateKeys);
+  const deleteMutation = useDeleteMovement(movement.id, invalidateKeys);
 
   const canApprove = movement.status === 'PENDENTE' && hasPermission('movements:APPROVE');
+  const canDelete = hasPermission('movements:DELETE');
+
+  const handleDelete = () => {
+    const reversible = movement.status === 'CONCLUIDA' || movement.status === 'APROVADA';
+    const message = reversible
+      ? 'Excluir esta movimentação e estornar o estoque? Esta ação não pode ser desfeita.'
+      : 'Excluir esta movimentação? Esta ação não pode ser desfeita.';
+    if (!window.confirm(message)) return;
+    deleteMutation.mutate();
+  };
 
   return (
     <>
@@ -90,6 +120,17 @@ export function MovementApprovalActions({
               <X className="h-4 w-4" />
             </button>
           </>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            title="Excluir"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         )}
       </div>
 

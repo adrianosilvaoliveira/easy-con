@@ -27,6 +27,7 @@ export const GERENCIA_PERMISSIONS = [
   ...OPERACIONAL_PERMISSIONS,
   'products:DELETE',
   'stock:DELETE',
+  'movements:DELETE',
   'batches:DELETE',
   'audit:READ',
 ] as const;
