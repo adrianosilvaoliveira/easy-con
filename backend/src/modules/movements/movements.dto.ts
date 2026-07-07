@@ -1,11 +1,22 @@
 import { z } from 'zod';
 import { MovementType } from '@prisma/client';
 
+/** Trata campos opcionais "vazios" (""/null) como ausentes antes de coagir para número. */
+const emptyToUndefined = (value: unknown) =>
+  value === '' || value === null ? undefined : value;
+
+const optionalPositiveNumber = z.preprocess(
+  emptyToUndefined,
+  z.coerce.number().positive().optional()
+);
+
+const optionalUuid = z.preprocess(emptyToUndefined, z.string().uuid().optional());
+
 const baseMovement = z.object({
   productId: z.string().uuid(),
   batchId: z.string().uuid().optional(),
-  quantity: z.number().int().positive(),
-  unitPrice: z.number().positive().optional(),
+  quantity: z.coerce.number().int().positive(),
+  unitPrice: optionalPositiveNumber,
   reason: z.string().optional(),
   notes: z.string().optional(),
   movementDate: z.string().datetime().optional(),
@@ -16,7 +27,7 @@ const entryBatchLineSchema = z.object({
   expirationDate: z.string().min(1, 'Data de validade obrigatória'),
   manufacturingDate: z.string().min(1, 'Data de fabricação obrigatória'),
   quantity: z.coerce.number().int().positive('Quantidade deve ser maior que zero'),
-  unitPrice: z.coerce.number().positive().optional(),
+  unitPrice: optionalPositiveNumber,
 });
 
 export const entrySchema = z
@@ -29,7 +40,7 @@ export const entrySchema = z
     ]),
     productId: z.string().uuid(),
     destinationLocationId: z.string().uuid(),
-    supplierId: z.string().uuid().optional(),
+    supplierId: optionalUuid,
     invoiceNumber: z.string().optional(),
     reason: z.string().optional(),
     notes: z.string().optional(),

@@ -143,8 +143,18 @@ export function EntriesPage() {
       setModalOpen(false);
       reset(defaultFormValues);
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao registrar entrada'),
+    onError: (err: {
+      response?: {
+        data?: { message?: string; errors?: { field?: string; message?: string }[] };
+      };
+    }) => {
+      const data = err.response?.data;
+      const details = data?.errors
+        ?.map((e) => e.message)
+        .filter(Boolean)
+        .join(' · ');
+      toast.error(details || data?.message || 'Erro ao registrar entrada');
+    },
   });
 
   const openModal = () => {
