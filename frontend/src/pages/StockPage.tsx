@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Boxes, MapPin, Search, X, Pencil, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Boxes, MapPin, Search, X, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -258,6 +258,7 @@ export function StockPage() {
         emptyIcon={Boxes}
         emptyTitle="Nenhum item encontrado"
         emptyDescription="Ajuste os filtros ou cadastre entradas de estoque."
+        onRowClick={canEditProduct ? (item) => openEditProduct(item.product.id) : undefined}
         columns={[
           {
             key: 'product',
@@ -279,24 +280,6 @@ export function StockPage() {
             header: 'Quantidade',
             render: (i) => <span className="font-semibold">{i.quantity}</span>,
           },
-          ...(canEditProduct
-            ? [
-                {
-                  key: 'actions',
-                  header: '',
-                  render: (i: StockItem) => (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => openEditProduct(i.product.id)}
-                      aria-label={`Editar ${i.product.name}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  ),
-                },
-              ]
-            : []),
         ]}
       />
 
