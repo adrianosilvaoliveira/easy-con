@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
-import { formatProductName } from '@/utils/format';
+import { formatProductName, formatProductNameInput } from '@/utils/format';
 import { CategoryFormModal } from '@/components/products/CategoryFormModal';
 import { SupplierFormModal } from '@/components/suppliers/SupplierFormModal';
 import { LocationFormModal } from '@/components/stock/LocationFormModal';
@@ -29,10 +29,7 @@ function selectOptionValues(
 }
 
 export const productSchema = z.object({
-  name: z
-    .string()
-    .min(2, 'Nome obrigatório')
-    .transform((value) => formatProductName(value)),
+  name: z.string().min(2, 'Nome obrigatório'),
   internalCode: z.string().max(50, 'Código muito longo').optional(),
   barcode: z.string().optional(),
   categoryId: z.string().uuid('Selecione a categoria'),
@@ -130,7 +127,7 @@ export function ProductFormModal({
       });
       setActive(product.active ?? true);
     } else if (!isEdit) {
-      reset({ unit: 'UN', minQuantity: 0, name: formatProductName(initialName) });
+      reset({ unit: 'UN', minQuantity: 0, name: formatProductNameInput(initialName) });
       setActive(true);
     }
   }, [open, product, isEdit, initialName, reset]);
@@ -203,7 +200,7 @@ export function ProductFormModal({
                   error={errors.name?.message}
                   {...field}
                   className="uppercase"
-                  onChange={(e) => field.onChange(e.target.value.toLocaleUpperCase('pt-BR'))}
+                  onChange={(e) => field.onChange(formatProductNameInput(e.target.value))}
                 />
               )}
             />

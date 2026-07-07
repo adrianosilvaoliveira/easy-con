@@ -22,6 +22,11 @@ export function formatProductName(name: string): string {
   return name.trim().toLocaleUpperCase('pt-BR');
 }
 
+/** Formatação durante digitação — mantém espaços internos. */
+export function formatProductNameInput(name: string): string {
+  return name.toLocaleUpperCase('pt-BR');
+}
+
 export function movementTypeLabel(type: string): string {
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
 }
