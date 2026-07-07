@@ -31,7 +31,16 @@ export const changePasswordSchema = z.object({
     .regex(/[0-9]/),
 });
 
+export const updateAvatarSchema = z.object({
+  avatarUrl: z
+    .string()
+    .min(1, 'Imagem obrigatória')
+    .refine((value) => value.startsWith('data:image/'), 'Formato de imagem inválido')
+    .refine((value) => value.length <= 3_000_000, 'Imagem muito grande. Máximo 2 MB.'),
+});
+
 export type LoginDTO = z.infer<typeof loginSchema>;
 export type RefreshTokenDTO = z.infer<typeof refreshTokenSchema>;
 export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>;
+export type UpdateAvatarDTO = z.infer<typeof updateAvatarSchema>;

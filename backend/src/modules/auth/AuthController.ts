@@ -31,4 +31,14 @@ export class AuthController {
     const result = await AuthService.me(req.user!.id);
     res.json({ success: true, data: result });
   }
+
+  static async updateAvatar(req: Request, res: Response): Promise<void> {
+    const result = await AuthService.updateAvatar(req.user!.id, req.body.avatarUrl);
+    res.json({ success: true, data: result });
+  }
+
+  static async removeAvatar(req: Request, res: Response): Promise<void> {
+    const result = await AuthService.removeAvatar(req.user!.id);
+    res.json({ success: true, data: result });
+  }
 }

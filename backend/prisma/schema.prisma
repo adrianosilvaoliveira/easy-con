@@ -87,6 +87,7 @@ model User {
   email             String         @unique
   password          String
   active            Boolean        @default(true)
+  avatarUrl         String?        @db.Text
   roleId            String
   role              Role           @relation(fields: [roleId], references: [id])
   /** Quando true, usa permissões em customPermissions em vez do perfil */

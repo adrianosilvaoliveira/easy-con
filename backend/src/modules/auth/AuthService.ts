@@ -7,19 +7,36 @@ import { AuditService } from '../../services/AuditService';
 import { env } from '../../configs/env';
 import type { LoginDTO, ForgotPasswordDTO, ResetPasswordDTO } from './auth.dto';
 import { resolvePermissionsFromUser } from '../../shared/utils/permissionResolver';
+import { Prisma } from '@prisma/client';
+
+const userAuthInclude = {
+  role: {
+    include: {
+      permissions: { include: { permission: true } },
+    },
+  },
+  customPermissions: { include: { permission: true } },
+} as const;
+
+type UserWithAuthRelations = Prisma.UserGetPayload<{ include: typeof userAuthInclude }>;
 
 export class AuthService {
+  private static formatUserProfile(user: UserWithAuthRelations) {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role.name,
+      permissions: resolvePermissionsFromUser(user),
+      useCustomAccess: user.useCustomAccess,
+      avatarUrl: user.avatarUrl,
+    };
+  }
+
   static async login(data: LoginDTO, ip?: string, userAgent?: string) {
     const user = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
-      include: {
-        role: {
-          include: {
-            permissions: { include: { permission: true } },
-          },
-        },
-        customPermissions: { include: { permission: true } },
-      },
+      include: userAuthInclude,
     });
 
     if (!user || !user.active) {
@@ -54,14 +71,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role.name,
-        permissions: resolvePermissionsFromUser(user),
-        useCustomAccess: user.useCustomAccess,
-      },
+      user: this.formatUserProfile(user),
     };
   }
 
@@ -163,25 +173,31 @@ export class AuthService {
   static async me(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        role: {
-          include: {
-            permissions: { include: { permission: true } },
-          },
-        },
-        customPermissions: { include: { permission: true } },
-      },
+      include: userAuthInclude,
     });
 
     if (!user) throw new NotFoundError('Usuário não encontrado');
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role.name,
-      useCustomAccess: user.useCustomAccess,
-      permissions: resolvePermissionsFromUser(user),
-    };
+    return this.formatUserProfile(user);
+  }
+
+  static async updateAvatar(userId: string, avatarUrl: string) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
+      include: userAuthInclude,
+    });
+
+    return this.formatUserProfile(user);
+  }
+
+  static async removeAvatar(userId: string) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: null },
+      include: userAuthInclude,
+    });
+
+    return this.formatUserProfile(user);
   }
 }

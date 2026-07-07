@@ -6,6 +6,7 @@ import {
   refreshTokenSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateAvatarSchema,
 } from '../modules/auth/auth.dto';
 import { authenticate } from '../middlewares/auth';
 import { asyncHandler } from '../middlewares/asyncHandler';
@@ -25,5 +26,12 @@ authRoutes.post('/logout', validate(refreshTokenSchema), asyncHandler(AuthContro
 authRoutes.post('/forgot-password', validate(forgotPasswordSchema), asyncHandler(AuthController.forgotPassword));
 authRoutes.post('/reset-password', validate(resetPasswordSchema), asyncHandler(AuthController.resetPassword));
 authRoutes.get('/me', authenticate, asyncHandler(AuthController.me));
+authRoutes.put(
+  '/me/avatar',
+  authenticate,
+  validate(updateAvatarSchema),
+  asyncHandler(AuthController.updateAvatar)
+);
+authRoutes.delete('/me/avatar', authenticate, asyncHandler(AuthController.removeAvatar));
 
 export { authRoutes };

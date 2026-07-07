@@ -13,7 +13,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { SettingsNavItem } from '@/components/settings/SettingsNavItem';
 import { SettingsGroupPanel } from '@/components/settings/SettingsGroupPanel';
 import { useAuthStore } from '@/stores/authStore';
-import { useProfileStore } from '@/stores/profileStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { UserAvatar } from '@/components/layout/UserAvatar';
 import { getRoleLabel } from '@/constants/roles';
@@ -21,7 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/utils/cn';
 import api from '@/services/api';
-import type { OrganizationSettings } from '@/types';
+import type { OrganizationSettings, User } from '@/types';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
@@ -56,12 +55,12 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const activeSection = sectionFromPath(location.pathname);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canEditOrg = hasPermission('settings:UPDATE');
   const darkMode = useThemeStore((s) => s.darkMode);
   const toggleDarkMode = useThemeStore((s) => s.toggleDarkMode);
-  const avatarUrl = useProfileStore((s) => (user ? s.avatars[user.id] : undefined));
-  const setAvatar = useProfileStore((s) => s.setAvatar);
+  const avatarUrl = user?.avatarUrl;
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -140,6 +139,25 @@ export function SettingsPage() {
     onError: () => toast.error('Não foi possível salvar os dados da empresa.'),
   });
 
+  const saveAvatar = useMutation({
+    mutationFn: (avatarUrl: string) =>
+      api.put<{ success: boolean; data: User }>('/auth/me/avatar', { avatarUrl }),
+    onSuccess: (res) => {
+      setUser(res.data.data);
+      toast.success('Foto atualizada.');
+    },
+    onError: () => toast.error('Não foi possível salvar a foto.'),
+  });
+
+  const removeAvatar = useMutation({
+    mutationFn: () => api.delete<{ success: boolean; data: User }>('/auth/me/avatar'),
+    onSuccess: (res) => {
+      setUser(res.data.data);
+      toast.success('Foto removida.');
+    },
+    onError: () => toast.error('Não foi possível remover a foto.'),
+  });
+
   const onPickPhoto = async (file: File | undefined) => {
     if (!file || !user) return;
     if (!file.type.startsWith('image/')) {
@@ -154,8 +172,7 @@ export function SettingsPage() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setAvatar(user.id, reader.result);
-        toast.success('Foto atualizada.');
+        saveAvatar.mutate(reader.result);
       }
     };
     reader.readAsDataURL(file);
@@ -200,14 +217,15 @@ export function SettingsPage() {
                       className="hidden"
                       onChange={(e) => onPickPhoto(e.target.files?.[0])}
                     />
-                    <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()}>
+                    <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()} loading={saveAvatar.isPending}>
                       Trocar foto
                     </Button>
                     {avatarUrl && (
                       <Button
                         type="button"
                         variant="secondary"
-                        onClick={() => user && setAvatar(user.id, null)}
+                        onClick={() => removeAvatar.mutate()}
+                        loading={removeAvatar.isPending}
                       >
                         Remover foto
                       </Button>

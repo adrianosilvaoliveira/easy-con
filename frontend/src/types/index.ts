@@ -14,6 +14,7 @@ export interface User {
   role: string;
   permissions: string[];
   useCustomAccess?: boolean;
+  avatarUrl?: string | null;
 }
 
 export interface AuthResponse {

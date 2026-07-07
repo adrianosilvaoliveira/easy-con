@@ -4,7 +4,6 @@ import { LogOut, Moon, Settings, Sun, User } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
-import { useProfileStore } from '@/stores/profileStore';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { UserAvatar } from '@/components/layout/UserAvatar';
 import { getRoleLabel } from '@/constants/roles';
@@ -19,7 +18,7 @@ export function UserMenu({ triggerClassName }: UserMenuProps) {
   const { user, logout, refreshToken } = useAuthStore();
   const darkMode = useThemeStore((s) => s.darkMode);
   const toggleDarkMode = useThemeStore((s) => s.toggleDarkMode);
-  const avatarUrl = useProfileStore((s) => (user ? s.avatars[user.id] : undefined));
+  const avatarUrl = user?.avatarUrl;
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
