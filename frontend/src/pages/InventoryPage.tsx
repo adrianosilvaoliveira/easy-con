@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, ClipboardCheck, Plus } from 'lucide-react';
+import { ClipboardList, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { Button } from '@/components/ui/Button';
@@ -95,6 +95,7 @@ export function InventoryPage() {
         data={data?.data || []}
         emptyIcon={ClipboardList}
         emptyTitle="Nenhum inventário registrado"
+        onRowClick={(i) => setCountingId(i.id)}
         columns={[
           { key: 'location', header: 'Local', render: (i) => i.location.name },
           {
@@ -107,21 +108,6 @@ export function InventoryPage() {
           { key: 'user', header: 'Responsável', render: (i) => i.user.name },
           { key: 'started', header: 'Início', render: (i) => formatDateTime(i.startedAt) },
           { key: 'items', header: 'Itens', render: (i) => i._count?.items ?? 0 },
-          {
-            key: 'actions',
-            header: 'Ações',
-            render: (i) =>
-              i.status === 'EM_ANDAMENTO' ? (
-                <Button size="sm" onClick={() => setCountingId(i.id)}>
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                  Contar
-                </Button>
-              ) : (
-                <Button size="sm" variant="secondary" onClick={() => setCountingId(i.id)}>
-                  Ver
-                </Button>
-              ),
-          },
         ]}
       />
     </div>

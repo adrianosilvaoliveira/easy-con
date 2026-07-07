@@ -16,9 +16,9 @@ import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import {
-  MovementApprovalActions,
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
+import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 
 const exitSchema = z.object({
   type: z.enum(['SAIDA_CONSUMO', 'SAIDA_CIRURGIA', 'SAIDA_CONSULTA', 'SAIDA_PERDA', 'SAIDA_VENCIMENTO']),
@@ -31,6 +31,7 @@ const exitSchema = z.object({
 
 export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const queryClient = useQueryClient();
 
   const { data: locations } = useQuery({
@@ -87,6 +88,7 @@ export function ExitsPage() {
         loading={isLoading}
         data={data?.data || []}
         emptyIcon={ArrowUpFromLine}
+        onRowClick={(m) => setSelectedMovement(m)}
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
           { key: 'type', header: 'Tipo', render: (m) => <Badge variant="warning">{movementTypeLabel(m.type)}</Badge> },
@@ -95,15 +97,17 @@ export function ExitsPage() {
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name || '-' },
           { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
-          {
-            key: 'actions',
-            header: 'Ações',
-            render: (m) => (
-              <MovementApprovalActions movement={m} invalidateKeys={['exits']} />
-            ),
-          },
         ]}
       />
+
+      {selectedMovement && (
+        <MovementDetailsModal
+          open
+          onClose={() => setSelectedMovement(null)}
+          movement={selectedMovement}
+          invalidateKeys={['exits']}
+        />
+      )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Saída" size="lg">
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">

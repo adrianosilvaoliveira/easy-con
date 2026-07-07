@@ -17,9 +17,9 @@ import { SupplierSearchSelect } from '@/components/suppliers/SupplierSearchSelec
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import {
-  MovementApprovalActions,
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
+import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 
 const batchLineSchema = z.object({
   batchNumber: z.string().min(1, 'Lote obrigatório'),
@@ -74,6 +74,7 @@ const defaultFormValues: EntryForm = {
 
 export function EntriesPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const queryClient = useQueryClient();
 
   const { data: locations } = useQuery({
@@ -177,6 +178,7 @@ export function EntriesPage() {
         loading={isLoading}
         data={data?.data || []}
         emptyIcon={ArrowDownToLine}
+        onRowClick={(m) => setSelectedMovement(m)}
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
           {
@@ -195,15 +197,17 @@ export function EntriesPage() {
           { key: 'dest', header: 'Destino', render: (m) => m.destinationLocation?.name || '-' },
           { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
-          {
-            key: 'actions',
-            header: 'Ações',
-            render: (m) => (
-              <MovementApprovalActions movement={m} invalidateKeys={['entries']} />
-            ),
-          },
         ]}
       />
+
+      {selectedMovement && (
+        <MovementDetailsModal
+          open
+          onClose={() => setSelectedMovement(null)}
+          movement={selectedMovement}
+          invalidateKeys={['entries']}
+        />
+      )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Entrada" size="3xl">
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">

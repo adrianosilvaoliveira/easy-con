@@ -14,9 +14,9 @@ import { DataTable } from '@/components/ui/DataTable';
 import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, formatProductName } from '@/utils/format';
 import {
-  MovementApprovalActions,
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
+import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 
 const transferSchema = z.object({
@@ -30,6 +30,7 @@ const transferSchema = z.object({
 
 export function TransfersPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const queryClient = useQueryClient();
 
   const { data: locations } = useQuery({
@@ -91,6 +92,7 @@ export function TransfersPage() {
         loading={isLoading}
         data={data?.data || []}
         emptyIcon={ArrowLeftRight}
+        onRowClick={(m) => setSelectedMovement(m)}
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
           { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
@@ -99,15 +101,17 @@ export function TransfersPage() {
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
           { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
-          {
-            key: 'actions',
-            header: 'Ações',
-            render: (m) => (
-              <MovementApprovalActions movement={m} invalidateKeys={['transfers']} />
-            ),
-          },
         ]}
       />
+
+      {selectedMovement && (
+        <MovementDetailsModal
+          open
+          onClose={() => setSelectedMovement(null)}
+          movement={selectedMovement}
+          invalidateKeys={['transfers']}
+        />
+      )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Transferência" size="lg">
         <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">

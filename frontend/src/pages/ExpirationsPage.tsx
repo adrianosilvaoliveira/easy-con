@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, Download, Filter, Pencil } from 'lucide-react';
+import { AlertTriangle, Plus, Download, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -220,6 +220,9 @@ export function ExpirationsPage() {
         data={batches}
         emptyIcon={AlertTriangle}
         emptyTitle="Nenhum lote encontrado"
+        onRowClick={
+          hasPermission('batches:UPDATE') ? (batch) => setEditBatch(batch) : undefined
+        }
         columns={[
           { key: 'product', header: 'Produto', render: (b) => (
             <div>
@@ -234,19 +237,6 @@ export function ExpirationsPage() {
           { key: 'status', header: 'Status', render: (b) => (
             <ExpirationBadge status={b.status} days={b.daysUntilExpiration} />
           )},
-          ...(hasPermission('batches:UPDATE')
-            ? [
-                {
-                  key: 'actions',
-                  header: '',
-                  render: (b: ProductBatch) => (
-                    <Button variant="secondary" size="sm" onClick={() => setEditBatch(b)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  ),
-                },
-              ]
-            : []),
         ]}
       />
 

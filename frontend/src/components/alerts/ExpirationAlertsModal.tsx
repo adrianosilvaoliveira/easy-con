@@ -163,22 +163,22 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
                 {belowMin.map((p) => (
                   <li
                     key={`belowmin-${p.id}`}
-                    className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20"
+                    className="rounded-lg border border-red-200 bg-red-50/70 p-3 dark:border-red-900/50 dark:bg-red-950/30"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
-                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                        <p className="flex items-center gap-2 font-medium text-red-900 dark:text-red-100">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
                           {formatProductName(p.name)}
                         </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-red-600/80 dark:text-red-300/80">
                           Código {p.internalCode}
                         </p>
-                        <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                        <p className="mt-1 text-xs font-medium text-red-700 dark:text-red-300">
                           Estoque {p.current}/{p.minQuantity} un. abaixo do mínimo
                         </p>
                       </div>
-                      <Badge variant={p.current === 0 ? 'danger' : 'warning'}>
+                      <Badge variant="danger">
                         {p.current === 0 ? 'Sem estoque' : 'Estoque baixo'}
                       </Badge>
                     </div>
