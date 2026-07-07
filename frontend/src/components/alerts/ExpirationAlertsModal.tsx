@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import api from '@/services/api';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { ExpirationBadge, ExpirationStatusType } from '@/components/expiration/ExpirationBadge';
 import { EXPIRATION_ALERT_LABELS, SNOOZE_PRESETS } from '@/constants/expirationAlertLabels';
 import { useAuthStore } from '@/stores/authStore';
@@ -106,6 +107,7 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
   const activeAlerts: ExpirationAlertRecord[] = activeData?.data ?? [];
   const historyAlerts: ExpirationAlertRecord[] = historyData?.data ?? [];
   const belowMin = stockAdvisory?.belowMin ?? [];
+  const activeCount = activeAlerts.length + belowMin.length;
 
   return (
     <Modal open={open} onClose={onClose} title="Alertas e avisos" size="lg">
@@ -122,8 +124,8 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
             )}
           >
             Ativos
-            {activeAlerts.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 text-xs">{activeAlerts.length}</span>
+            {activeCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 text-xs">{activeCount}</span>
             )}
           </button>
           <button
@@ -142,25 +144,6 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
 
         {tab === 'active' && (
           <>
-            {belowMin.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/30">
-                <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
-                  <AlertTriangle className="h-4 w-4" />
-                  Estoque abaixo do mínimo
-                </p>
-                <ul className="space-y-1 text-sm text-amber-800 dark:text-amber-300">
-                  {belowMin.slice(0, 8).map((p) => (
-                    <li key={p.id}>
-                      {p.name} ({p.internalCode}) — {p.current}/{p.minQuantity} un.
-                    </li>
-                  ))}
-                  {belowMin.length > 8 && (
-                    <li className="text-xs opacity-80">+ {belowMin.length - 8} produto(s)</li>
-                  )}
-                </ul>
-              </div>
-            )}
-
             {canManage && activeAlerts.length > 0 && (
               <div className="flex justify-end">
                 <Button variant="secondary" size="sm" onClick={() => markAll.mutate()} loading={markAll.isPending}>
@@ -171,12 +154,36 @@ export function ExpirationAlertsModal({ open, onClose }: Props) {
 
             {loadingActive ? (
               <p className="py-8 text-center text-sm text-slate-500">Carregando...</p>
-            ) : activeAlerts.length === 0 ? (
+            ) : belowMin.length === 0 && activeAlerts.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                 Nenhum alerta pendente no momento.
               </p>
             ) : (
               <ul className="max-h-[min(50vh,420px)] space-y-2 overflow-y-auto">
+                {belowMin.map((p) => (
+                  <li
+                    key={`belowmin-${p.id}`}
+                    className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/20"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                          {formatProductName(p.name)}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Código {p.internalCode}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                          Estoque {p.current}/{p.minQuantity} un. abaixo do mínimo
+                        </p>
+                      </div>
+                      <Badge variant={p.current === 0 ? 'danger' : 'warning'}>
+                        {p.current === 0 ? 'Sem estoque' : 'Estoque baixo'}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
                 {activeAlerts.map((a) => (
                   <li
                     key={a.id}
