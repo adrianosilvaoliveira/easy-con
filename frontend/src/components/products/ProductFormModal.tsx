@@ -203,7 +203,7 @@ export function ProductFormModal({
                   error={errors.name?.message}
                   {...field}
                   className="uppercase"
-                  onChange={(e) => field.onChange(formatProductName(e.target.value))}
+                  onChange={(e) => field.onChange(e.target.value.toLocaleUpperCase('pt-BR'))}
                 />
               )}
             />
