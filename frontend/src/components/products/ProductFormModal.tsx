@@ -189,11 +189,23 @@ export function ProductFormModal({
       onClose={onClose}
       title={isEdit ? 'Editar Produto' : 'Novo Produto'}
       size="xl"
+      footer={
+        !loadingProduct || !isEdit ? (
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" type="button" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="product-form" loading={pending}>
+              {isEdit ? 'Salvar alterações' : 'Salvar produto'}
+            </Button>
+          </div>
+        ) : undefined
+      }
     >
       {loadingProduct && isEdit ? (
         <p className="py-8 text-center text-slate-500">Carregando...</p>
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
+        <form id="product-form" onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Controller
               name="name"
@@ -347,14 +359,6 @@ export function ProductFormModal({
             <Input label="Observações" {...register('notes')} />
           </div>
           {isEdit && <ActiveToggleField active={active} onChange={setActive} />}
-          <div className="flex justify-end gap-2 sm:col-span-2">
-            <Button variant="secondary" type="button" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" loading={pending}>
-              {isEdit ? 'Salvar alterações' : 'Salvar produto'}
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

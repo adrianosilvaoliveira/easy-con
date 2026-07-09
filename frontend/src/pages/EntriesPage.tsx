@@ -209,8 +209,23 @@ export function EntriesPage() {
         />
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Entrada" size="3xl">
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Nova Entrada"
+        size="3xl"
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="entry-form" loading={mutation.isPending}>
+              Registrar {fields.length} lote(s) · {totalQuantity} un.
+            </Button>
+          </div>
+        }
+      >
+        <form id="entry-form" onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="form-label">Tipo</label>
@@ -349,15 +364,6 @@ export function EntriesPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2 border-t pt-4">
-            <Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" loading={mutation.isPending}>
-              Registrar {fields.length} lote(s) · {totalQuantity} un.
-            </Button>
           </div>
         </form>
       </Modal>
