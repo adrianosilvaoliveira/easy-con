@@ -243,13 +243,22 @@ A Vercel injeta `VITE_BACKEND_URL=/_/backend` no build do frontend. O app monta 
 
 ### 5. Cron de vencimentos
 
-Agendado em `backend/vercel.json` (diário às 06:00 UTC). A Vercel envia `Authorization: Bearer <CRON_SECRET>` quando `CRON_SECRET` está definida.
+Agendado em `backend/vercel.json` (diário às 06:00 UTC). A Vercel envia `Authorization: Bearer <CRON_SECRET>` no cabeçalho. **Em produção `CRON_SECRET` é obrigatória**: se não estiver definida, o endpoint recusa a execução (retorna `500`) para não ficar aberto.
 
 ### 6. Verificação pós-deploy
 
 - UI: `https://<seu-projeto>.vercel.app`
 - Health: `https://<seu-projeto>.vercel.app/_/backend/api/health`
 - Swagger: `https://<seu-projeto>.vercel.app/_/backend/api/docs`
+
+### 7. Observabilidade
+
+Sem custo de APM externo, o monitoramento se apoia em recursos nativos:
+
+- **Health check com banco:** `GET /api/health` executa `SELECT 1` no PostgreSQL e retorna `503` (`status: degraded`) quando o banco está indisponível — use como *health check* de uptime.
+- **Métricas nativas da Vercel:** o painel do projeto (aba **Observability** / **Logs**) expõe duração de invocação, *cold starts* e taxa de `5xx`. Combine com o health check para alertas básicos.
+- **Logs estruturados:** em produção o backend emite logs em **JSON** (via Winston para o stdout), facilitando busca e filtro na Vercel. Cada erro `5xx` inclui o `requestId` correlacionável com a linha de log da requisição.
+- **Slow query log:** consultas Prisma acima de `500 ms` são registradas como `warn` (`"Slow query"` com `durationMs` e o SQL), ajudando a identificar gargalos sem instrumentação adicional.
 
 ### Produção local / Docker
 

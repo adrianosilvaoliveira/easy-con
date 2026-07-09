@@ -1,18 +1,14 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
-import api from '@/services/api';
 import { ExpirationAlertsModal } from '@/components/alerts/ExpirationAlertsModal';
+import { useAlertCount } from '@/hooks/queries/useAlertCount';
 
 export function NotificationBell() {
   const [modalOpen, setModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: count = 0 } = useQuery({
-    queryKey: ['alerts-count'],
-    queryFn: () => api.get('/batches/alerts/count').then((r) => r.data.data.count as number),
-    refetchInterval: 60_000,
-  });
+  const { data: count = 0 } = useAlertCount();
 
   return (
     <>

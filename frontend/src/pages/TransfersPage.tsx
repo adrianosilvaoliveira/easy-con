@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,6 +18,11 @@ import {
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
+import { useLocations } from '@/hooks/queries/useLocations';
+import { queryKeys } from '@/lib/queryKeys';
+import { Pagination } from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 20;
 
 const transferSchema = z.object({
   type: z.literal('TRANSFERENCIA'),
@@ -33,19 +38,19 @@ export function TransfersPage() {
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-  });
+  const { data: locations } = useLocations();
+
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['transfers'],
+    queryKey: ['transfers', page],
     queryFn: () =>
       api
         .get<PaginatedResponse<StockMovement>>('/movements', {
-          params: { type: 'TRANSFERENCIA', limit: 50 },
+          params: { type: 'TRANSFERENCIA', page, limit: PAGE_SIZE },
         })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -109,7 +114,7 @@ export function TransfersPage() {
       );
       queryClient.invalidateQueries({ queryKey: ['transfers'] });
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setModalOpen(false);
@@ -145,6 +150,8 @@ export function TransfersPage() {
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
         ]}
       />
+
+      <Pagination meta={data?.meta} page={page} onPageChange={setPage} loading={isLoading} />
 
       {selectedMovement && (
         <MovementDetailsModal

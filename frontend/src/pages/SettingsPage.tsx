@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,8 +6,6 @@ import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
-import { UsersPage } from '@/pages/UsersPage';
-import { OperationalCadastrosPanel } from '@/components/cadastros/OperationalCadastrosPanel';
 import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SettingsNavItem } from '@/components/settings/SettingsNavItem';
@@ -19,8 +17,16 @@ import { getRoleLabel } from '@/constants/roles';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/utils/cn';
+import { RouteFallback } from '@/components/ui/RouteFallback';
 import api from '@/services/api';
 import type { OrganizationSettings, User } from '@/types';
+
+const UsersPage = lazy(() => import('@/pages/UsersPage').then((m) => ({ default: m.UsersPage })));
+const OperationalCadastrosPanel = lazy(() =>
+  import('@/components/cadastros/OperationalCadastrosPanel').then((m) => ({
+    default: m.OperationalCadastrosPanel,
+  }))
+);
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
@@ -350,11 +356,17 @@ export function SettingsPage() {
                 sectionTitle="Fornecedores e locais de estoque"
                 sectionHint="Gerencie fornecedores, locais de estoque e categorias de produtos."
               >
-                <OperationalCadastrosPanel />
+                <Suspense fallback={<RouteFallback />}>
+                  <OperationalCadastrosPanel />
+                </Suspense>
               </SettingsGroupPanel>
             )}
 
-            {activeSection === 'usuarios' && canReadUsers && <UsersPage embedded />}
+            {activeSection === 'usuarios' && canReadUsers && (
+              <Suspense fallback={<RouteFallback />}>
+                <UsersPage embedded />
+              </Suspense>
+            )}
 
             {activeSection === 'aparencia' && (
               <SettingsGroupPanel

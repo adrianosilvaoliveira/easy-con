@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { movementStatusLabel } from '@/utils/format';
 import type { StockMovement } from '@/types';
 import { MovementDetailsModal } from './MovementDetailsModal';
+import { queryKeys } from '@/lib/queryKeys';
 
 export const movementStatusVariant: Record<string, 'warning' | 'success' | 'danger' | 'info' | 'default'> = {
   PENDENTE: 'warning',
@@ -28,7 +29,7 @@ function invalidateMovementQueries(queryClient: ReturnType<typeof useQueryClient
   keys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   queryClient.invalidateQueries({ queryKey: ['stock'] });
   queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-  queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
   queryClient.invalidateQueries({ queryKey: ['batches'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 }

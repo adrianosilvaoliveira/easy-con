@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { InventoryCountPanel } from '@/components/inventory/InventoryCountPanel';
 import { formatDateTime } from '@/utils/format';
+import { useLocations } from '@/hooks/queries/useLocations';
 
 interface InventoryRecord {
   id: string;
@@ -23,10 +24,7 @@ export function InventoryPage() {
   const queryClient = useQueryClient();
   const [countingId, setCountingId] = useState<string | null>(null);
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-  });
+  const { data: locations } = useLocations();
 
   const { data, isLoading } = useQuery({
     queryKey: ['inventories'],

@@ -19,6 +19,34 @@ export async function authenticate(
     const token = authHeader.split(' ')[1];
     const payload = JwtProvider.verifyAccessToken(token);
 
+    const account = await prisma.user.findUnique({
+      where: { id: payload.sub, active: true },
+      select: { id: true, permissionsVersion: true },
+    });
+
+    if (!account) {
+      throw new UnauthorizedError('Usuário inválido ou inativo');
+    }
+
+    /** Caminho rápido: token válido e permissões inalteradas — sem joins de permissões. */
+    if (
+      account.permissionsVersion === payload.pv &&
+      Array.isArray(payload.permissions) &&
+      payload.roleName
+    ) {
+      req.user = {
+        id: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        roleId: payload.roleId,
+        roleName: payload.roleName,
+        permissions: payload.permissions,
+      };
+      next();
+      return;
+    }
+
+    /** Permissões mudaram desde a emissão do token: recarrega e re-resolve. */
     const user = await prisma.user.findUnique({
       where: { id: payload.sub, active: true },
       include: {

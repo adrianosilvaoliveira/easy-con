@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Filter, X, Download } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
+import api from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -44,7 +44,6 @@ const defaultExpirationFilters: ExpirationReportFilterValues = {
 };
 
 export function ReportsPage() {
-  const token = useAuthStore((s) => s.accessToken);
   const [filterModal, setFilterModal] = useState<ReportDef | null>(null);
   const [viewerReport, setViewerReport] = useState<ReportDef | null>(null);
   const [expirationFilters, setExpirationFilters] =
@@ -68,15 +67,10 @@ export function ReportsPage() {
   };
 
   const fetchPdfBlob = async (report: ReportDef) => {
-    const url = `${import.meta.env.VITE_API_URL || '/api'}${report.endpoint}${buildQuery(report)}`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+    const { data } = await api.get<Blob>(`${report.endpoint}${buildQuery(report)}`, {
+      responseType: 'blob',
     });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error((err as { message?: string }).message);
-    }
-    return response.blob();
+    return data;
   };
 
   const downloadReport = async (report: ReportDef) => {

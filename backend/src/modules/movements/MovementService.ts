@@ -28,6 +28,12 @@ const EXIT_TYPES: MovementType[] = [
   'SAIDA_PERDA',
   'SAIDA_VENCIMENTO',
 ];
+type MovementCategory = 'entry' | 'exit' | 'transfer';
+const MOVEMENT_CATEGORY_TYPES: Record<MovementCategory, MovementType[]> = {
+  entry: ENTRY_TYPES,
+  exit: EXIT_TYPES,
+  transfer: ['TRANSFERENCIA'],
+};
 const movementInclude = {
   product: true,
   originLocation: true,
@@ -785,7 +791,11 @@ export class MovementService {
   static async list(filters: Record<string, string | undefined>) {
     const pagination = parsePagination(filters.page, filters.limit);
     const where: Prisma.StockMovementWhereInput = {};
-    if (filters.type) where.type = filters.type as MovementType;
+    if (filters.type) {
+      where.type = filters.type as MovementType;
+    } else if (filters.category && filters.category in MOVEMENT_CATEGORY_TYPES) {
+      where.type = { in: MOVEMENT_CATEGORY_TYPES[filters.category as MovementCategory] };
+    }
     if (filters.status) where.status = filters.status as MovementStatus;
     if (filters.productId) where.productId = filters.productId;
     if (filters.locationId) {

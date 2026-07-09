@@ -5,6 +5,7 @@ import api from '@/services/api';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { queryKeys } from '@/lib/queryKeys';
 
 export interface CreatedStockLocation {
   id: string;
@@ -58,7 +59,7 @@ export function LocationFormModal({
     onSuccess: (res) => {
       const location = res.data.data as CreatedStockLocation;
       toast.success('Local cadastrado');
-      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       onSuccess?.(location);
       onClose();
     },

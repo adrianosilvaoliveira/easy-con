@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,6 +20,10 @@ import {
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
+import { useLocations } from '@/hooks/queries/useLocations';
+import { Pagination } from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 20;
 
 const batchLineSchema = z.object({
   batchNumber: z.string().min(1, 'Lote obrigatório'),
@@ -75,27 +79,20 @@ const defaultFormValues: EntryForm = {
 export function EntriesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-  });
+  const { data: locations } = useLocations();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['entries'],
+    queryKey: ['entries', page],
     queryFn: () =>
       api
         .get<PaginatedResponse<StockMovement>>('/movements', {
-          params: { limit: 50 },
+          params: { category: 'entry', page, limit: PAGE_SIZE },
         })
-        .then((r) => {
-          const entryTypes = ['ENTRADA_COMPRA', 'ENTRADA_MANUAL', 'AJUSTE_ENTRADA', 'DEVOLUCAO'];
-          return {
-            ...r.data,
-            data: r.data.data.filter((m) => entryTypes.includes(m.type)),
-          };
-        }),
+        .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -199,6 +196,8 @@ export function EntriesPage() {
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
         ]}
       />
+
+      <Pagination meta={data?.meta} page={page} onPageChange={setPage} loading={isLoading} />
 
       {selectedMovement && (
         <MovementDetailsModal

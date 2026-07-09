@@ -1,24 +1,65 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../database/prisma';
 import { chartPeriodSchema } from './dashboard.dto';
-import { buildEntriesExitsChart, getChartPeriodConfig } from './chartPeriod';
+import { getChartPeriodConfig } from './chartPeriod';
+import { memoryCache, CACHE_KEYS } from '../../shared/cache/memoryCache';
+
+interface BelowMinRow {
+  id: string;
+  name: string;
+  internalCode: string;
+  minQuantity: number;
+  category: string;
+  current: number;
+}
+
+interface ChartRow {
+  bucket: string;
+  entries: number;
+  exits: number;
+}
 
 export class DashboardService {
   static async getEntriesExitsChart(periodParam?: string) {
     const period = chartPeriodSchema.catch('month').parse(periodParam ?? 'month');
-    const { start } = getChartPeriodConfig(period);
+    const { start, groupBy, buckets } = getChartPeriodConfig(period);
 
-    const movements = await prisma.stockMovement.findMany({
-      where: { movementDate: { gte: start } },
-      select: { type: true, quantity: true, movementDate: true },
-    });
+    const bucketExpr =
+      groupBy === 'hour'
+        ? Prisma.sql`'h' || EXTRACT(HOUR FROM "movementDate")::int`
+        : groupBy === 'day'
+          ? Prisma.sql`to_char("movementDate", 'YYYY-MM-DD')`
+          : Prisma.sql`to_char("movementDate", 'YYYY-MM')`;
+
+    const rows = await prisma.$queryRaw<ChartRow[]>(Prisma.sql`
+      SELECT ${bucketExpr} AS bucket,
+        COALESCE(SUM(CASE WHEN "type" IN ('ENTRADA_COMPRA','ENTRADA_MANUAL','AJUSTE_ENTRADA','DEVOLUCAO') THEN quantity ELSE 0 END), 0)::int AS entries,
+        COALESCE(SUM(CASE WHEN "type" NOT IN ('ENTRADA_COMPRA','ENTRADA_MANUAL','AJUSTE_ENTRADA','DEVOLUCAO','TRANSFERENCIA') THEN quantity ELSE 0 END), 0)::int AS exits
+      FROM stock_movements
+      WHERE "movementDate" >= ${start}
+      GROUP BY bucket
+    `);
+
+    const entryMap = new Map(rows.map((r) => [r.bucket, r.entries]));
+    const exitMap = new Map(rows.map((r) => [r.bucket, r.exits]));
 
     return {
       period,
-      chartData: buildEntriesExitsChart(movements, period),
+      chartData: buckets.map((b) => ({
+        date: b.label,
+        entries: entryMap.get(b.key) ?? 0,
+        exits: exitMap.get(b.key) ?? 0,
+      })),
     };
   }
 
-  static async getMetrics() {
+  static getMetrics() {
+    return memoryCache.getOrSet(CACHE_KEYS.dashboardMetrics, 30_000, () =>
+      this.computeMetrics()
+    );
+  }
+
+  private static async computeMetrics() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -32,7 +73,7 @@ export class DashboardService {
       totalLocations,
       todayMovements,
       pendingTransfers,
-      products,
+      belowMin,
       expiringBatches,
     ] = await Promise.all([
       prisma.product.count({ where: { active: true } }),
@@ -43,10 +84,18 @@ export class DashboardService {
       prisma.stockMovement.count({
         where: { status: 'PENDENTE' },
       }),
-      prisma.product.findMany({
-        where: { active: true },
-        include: { stockItems: true, category: true },
-      }),
+      prisma.$queryRaw<BelowMinRow[]>(Prisma.sql`
+        SELECT p.id, p.name, p."internalCode" AS "internalCode", p."minQuantity" AS "minQuantity",
+          c.name AS category,
+          COALESCE(SUM(si.quantity), 0)::int AS current
+        FROM products p
+        JOIN categories c ON c.id = p."categoryId"
+        LEFT JOIN stock_items si ON si."productId" = p.id
+        WHERE p.active = true
+        GROUP BY p.id, c.name
+        HAVING COALESCE(SUM(si.quantity), 0) < p."minQuantity"
+        ORDER BY p.name
+      `),
       prisma.productBatch.findMany({
         where: {
           expirationDate: {
@@ -60,17 +109,6 @@ export class DashboardService {
         take: 10,
       }),
     ]);
-
-    const belowMin = products
-      .filter((p) => p.stockItems.reduce((s, i) => s + i.quantity, 0) < p.minQuantity)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        internalCode: p.internalCode,
-        minQuantity: p.minQuantity,
-        current: p.stockItems.reduce((s, i) => s + i.quantity, 0),
-        category: p.category.name,
-      }));
 
     const totalStockValue = await prisma.stockMovement.aggregate({
       where: {

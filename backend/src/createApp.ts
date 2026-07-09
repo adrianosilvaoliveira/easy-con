@@ -38,12 +38,18 @@ export function createApp(): Express {
     })
   );
   app.use(express.json({ limit: '10mb' }));
-  app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
   app.use((req, _res, next) => {
     req.requestId = uuidv4();
     next();
   });
+
+  morgan.token('request-id', (req: express.Request) => req.requestId ?? '-');
+  app.use(
+    morgan(':request-id :method :url :status :response-time ms', {
+      stream: { write: (msg) => logger.info(msg.trim()) },
+    })
+  );
 
   app.use(
     rateLimit({

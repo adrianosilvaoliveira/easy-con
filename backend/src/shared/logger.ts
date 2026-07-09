@@ -1,16 +1,20 @@
 import winston from 'winston';
 import { env } from '../configs/env';
 
-const { combine, timestamp, printf, colorize, errors } = winston.format;
+const { combine, timestamp, printf, colorize, errors, json } = winston.format;
 
-const logFormat = printf(({ level, message, timestamp: ts, stack }) => {
-  return `${ts} [${level}]: ${stack || message}`;
+const isProduction = env.NODE_ENV === 'production';
+
+const devFormat = printf(({ level, message, timestamp: ts, stack, requestId }) => {
+  const reqId = requestId ? ` [req:${requestId}]` : '';
+  return `${ts} [${level}]${reqId}: ${stack || message}`;
 });
 
+/** JSON em produção (parseável por Vercel/APMs); legível e colorido em dev. */
+const consoleFormat = isProduction ? json() : combine(colorize(), devFormat);
+
 const transports: winston.transport[] = [
-  new winston.transports.Console({
-    format: combine(colorize(), logFormat),
-  }),
+  new winston.transports.Console({ format: consoleFormat }),
 ];
 
 /** Vercel/serverless: filesystem é somente leitura — sem arquivo em logs/ */
@@ -22,11 +26,10 @@ if (!process.env.VERCEL) {
 }
 
 export const logger = winston.createLogger({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: isProduction ? 'info' : 'debug',
   format: combine(
     errors({ stack: true }),
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    logFormat
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' })
   ),
   transports,
 });

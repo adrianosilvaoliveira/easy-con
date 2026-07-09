@@ -6,7 +6,7 @@ import { isPrismaConnectionError } from '../shared/utils/prismaErrors';
 
 export function errorHandler(
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
@@ -54,10 +54,11 @@ export function errorHandler(
     return;
   }
 
-  logger.error('Unhandled error', err);
+  logger.error('Unhandled error', { message: err.message, stack: err.stack, requestId: req.requestId });
   res.status(500).json({
     success: false,
     code: 'INTERNAL_ERROR',
     message: 'Erro interno do servidor',
+    requestId: req.requestId,
   });
 }

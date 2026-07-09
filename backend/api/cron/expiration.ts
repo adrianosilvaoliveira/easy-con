@@ -5,6 +5,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = req.headers.authorization;
   const secret = process.env.CRON_SECRET;
 
+  if (process.env.NODE_ENV === 'production' && !secret) {
+    console.error('Cron expiration blocked: CRON_SECRET não configurado em produção');
+    res.status(500).json({ success: false, message: 'Cron não configurado' });
+    return;
+  }
+
   if (secret && auth !== `Bearer ${secret}`) {
     res.status(401).json({ success: false, message: 'Não autorizado' });
     return;

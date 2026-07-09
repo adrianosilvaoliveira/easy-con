@@ -252,6 +252,8 @@ export class UserService {
       updateData.useCustomAccess = data.useCustomAccess;
     }
 
+    updateData.permissionsVersion = { increment: 1 };
+
     await prisma.user.update({ where: { id }, data: updateData });
 
     const refreshed = await prisma.user.findUnique({ where: { id } });

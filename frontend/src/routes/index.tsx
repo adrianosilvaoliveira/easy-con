@@ -6,6 +6,7 @@ import { PermissionRoute } from './PermissionRoute';
 import { ROUTE_PERMISSIONS } from './routePermissions';
 import { LoginPage } from '@/pages/LoginPage';
 import { RouteFallback } from '@/components/ui/RouteFallback';
+import { RouteErrorBoundary } from '@/components/ui/RouteErrorBoundary';
 
 const DashboardPage = lazy(() =>
   import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
@@ -45,9 +46,11 @@ export function AppRoutes() {
         <Route element={<MainLayout />}>
           <Route
             element={
-              <Suspense fallback={<RouteFallback />}>
-                <Outlet />
-              </Suspense>
+              <RouteErrorBoundary>
+                <Suspense fallback={<RouteFallback />}>
+                  <Outlet />
+                </Suspense>
+              </RouteErrorBoundary>
             }
           >
             <Route element={<PermissionRoute permission={ROUTE_PERMISSIONS.dashboard} />}>

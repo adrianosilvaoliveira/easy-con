@@ -12,6 +12,7 @@ import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { useAuthStore } from '@/stores/authStore';
 import { DeleteCadastroSection } from '@/components/cadastros/DeleteCadastroSection';
+import { queryKeys } from '@/lib/queryKeys';
 
 type Tab = 'suppliers' | 'locations' | 'categories';
 
@@ -125,7 +126,7 @@ export function OperationalCadastrosPanel() {
     onSuccess: () => {
       toast.success(editing ? 'Atualizado' : 'Cadastrado');
       queryClient.invalidateQueries({ queryKey: [tab] });
-      if (tab === 'locations') queryClient.invalidateQueries({ queryKey: ['locations'] });
+      if (tab === 'locations') queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       if (tab === 'categories') queryClient.invalidateQueries({ queryKey: ['categories'] });
       if (tab === 'suppliers') queryClient.invalidateQueries({ queryKey: ['suppliers'] });
       setModalOpen(false);
@@ -139,6 +140,7 @@ export function OperationalCadastrosPanel() {
     onSuccess: () => {
       toast.success('Local excluído');
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       setModalOpen(false);
       setEditing(null);
     },

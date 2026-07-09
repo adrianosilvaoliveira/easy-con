@@ -3,14 +3,27 @@ import { logger } from '../shared/logger';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === 'development'
-        ? [{ emit: 'event', level: 'query' }, { emit: 'stdout', level: 'error' }]
-        : [{ emit: 'stdout', level: 'error' }],
+/** Queries acima deste limite são registradas como lentas para observabilidade. */
+const SLOW_QUERY_MS = 500;
+
+function createPrismaClient() {
+  const client = new PrismaClient({
+    log: [
+      { emit: 'event', level: 'query' },
+      { emit: 'stdout', level: 'error' },
+    ],
   });
+
+  client.$on('query', (e) => {
+    if (e.duration >= SLOW_QUERY_MS) {
+      logger.warn('Slow query', { durationMs: e.duration, query: e.query });
+    }
+  });
+
+  return client;
+}
+
+export const prisma = globalForPrisma.prisma || createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

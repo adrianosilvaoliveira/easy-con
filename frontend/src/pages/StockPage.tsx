@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/Button';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import { ProductFormModal } from '@/components/products/ProductFormModal';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
-import type { StockLocation, StockItem } from '@/types';
+import type { StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
 import { formatProductName } from '@/utils/format';
 import { useAuthStore } from '@/stores/authStore';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useLocations } from '@/hooks/queries/useLocations';
+import { queryKeys } from '@/lib/queryKeys';
 
 export function StockPage() {
   const queryClient = useQueryClient();
@@ -37,10 +39,7 @@ export function StockPage() {
     setPage(1);
   }, [debouncedSearch, locationId, debouncedBatch, includeInactive]);
 
-  const { data: locations, isLoading: loadingLoc } = useQuery({
-    queryKey: ['stock-locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data as StockLocation[]),
-  });
+  const { data: locations, isLoading: loadingLoc } = useLocations();
 
   const { data: items, isLoading: loadingItems } = useQuery({
     queryKey: ['stock-items', debouncedSearch, locationId, debouncedBatch, includeInactive, page],
@@ -83,7 +82,7 @@ export function StockPage() {
 
   const handleProductSaved = () => {
     queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-    queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
     queryClient.invalidateQueries({ queryKey: ['products'] });
   };
 
@@ -262,6 +261,7 @@ export function StockPage() {
       <DataTable<StockItem>
         loading={loadingItems}
         data={items?.data || []}
+        virtualized
         emptyIcon={Boxes}
         emptyTitle="Nenhum item encontrado"
         emptyDescription="Ajuste os filtros ou cadastre entradas de estoque."

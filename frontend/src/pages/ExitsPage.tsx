@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,6 +19,10 @@ import {
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
+import { useLocations } from '@/hooks/queries/useLocations';
+import { Pagination } from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 20;
 
 const exitSchema = z.object({
   type: z.enum(['SAIDA_CONSUMO', 'SAIDA_CIRURGIA', 'SAIDA_CONSULTA', 'SAIDA_PERDA', 'SAIDA_VENCIMENTO']),
@@ -32,22 +36,20 @@ const exitSchema = z.object({
 export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-  });
+  const { data: locations } = useLocations();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['exits'],
+    queryKey: ['exits', page],
     queryFn: () =>
       api
-        .get<PaginatedResponse<StockMovement>>('/movements', { params: { limit: 50 } })
-        .then((r) => ({
-          ...r.data,
-          data: r.data.data.filter((m) => m.type.startsWith('SAIDA_')),
-        })),
+        .get<PaginatedResponse<StockMovement>>('/movements', {
+          params: { category: 'exit', page, limit: PAGE_SIZE },
+        })
+        .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -99,6 +101,8 @@ export function ExitsPage() {
           { key: 'user', header: 'Usuário', render: (m) => m.user.name },
         ]}
       />
+
+      <Pagination meta={data?.meta} page={page} onPageChange={setPage} loading={isLoading} />
 
       {selectedMovement && (
         <MovementDetailsModal

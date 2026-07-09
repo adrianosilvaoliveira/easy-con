@@ -1,6 +1,7 @@
 import { prisma } from '../../database/prisma';
 import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagination';
 import { Prisma } from '@prisma/client';
+import { memoryCache, CACHE_KEYS } from '../../shared/cache/memoryCache';
 
 const HISTORY_RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -91,7 +92,9 @@ export class AlertService {
   }
 
   static async countActive() {
-    return prisma.expirationAlert.count({ where: this.activeWhere() });
+    return memoryCache.getOrSet(CACHE_KEYS.alertCount, 30_000, () =>
+      prisma.expirationAlert.count({ where: this.activeWhere() })
+    );
   }
 
   /** @deprecated use countActive */
@@ -100,7 +103,7 @@ export class AlertService {
   }
 
   static async markVisualized(id: string) {
-    return prisma.expirationAlert.update({
+    const result = await prisma.expirationAlert.update({
       where: { id },
       data: {
         visualized: true,
@@ -108,10 +111,12 @@ export class AlertService {
         snoozedUntil: null,
       },
     });
+    memoryCache.invalidate(CACHE_KEYS.alertCount);
+    return result;
   }
 
   static async snooze(id: string, until: Date) {
-    return prisma.expirationAlert.update({
+    const result = await prisma.expirationAlert.update({
       where: { id },
       data: {
         snoozedUntil: until,
@@ -119,6 +124,8 @@ export class AlertService {
         visualizedAt: null,
       },
     });
+    memoryCache.invalidate(CACHE_KEYS.alertCount);
+    return result;
   }
 
   static snoozeUntilFromPreset(preset: string): Date {
@@ -143,6 +150,7 @@ export class AlertService {
         snoozedUntil: null,
       },
     });
+    memoryCache.invalidate(CACHE_KEYS.alertCount);
     return { updated: result.count };
   }
 

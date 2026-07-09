@@ -16,6 +16,7 @@ import { SupplierFormModal } from '@/components/suppliers/SupplierFormModal';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { queryKeys } from '@/lib/queryKeys';
 
 function selectOptionValues(
   items: { name: string }[] | undefined,
@@ -155,7 +156,7 @@ export function ProductFormModal({
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       onSuccess?.(res.data.data);
       onClose();

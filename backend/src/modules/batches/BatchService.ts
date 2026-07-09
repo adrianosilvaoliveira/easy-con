@@ -405,21 +405,60 @@ export class BatchService {
   }
 
   static async runExpirationJob() {
-    const batches = await prisma.productBatch.findMany();
+    const t0 = new Date();
+    t0.setHours(0, 0, 0, 0);
+    const day = 24 * 60 * 60 * 1000;
+    const t31 = new Date(t0.getTime() + 31 * day);
+    const t91 = new Date(t0.getTime() + 91 * day);
 
-    let updated = 0;
-    for (const batch of batches) {
-      const status = calculateExpirationStatus(batch.expirationDate);
-      if (status !== batch.status) {
-        await prisma.productBatch.update({ where: { id: batch.id }, data: { status } });
-        updated++;
-      }
-      if (batch.quantity > 0) {
-        await this.syncBatchAlerts(batch.id);
-      }
+    // Atualiza status em lote por faixas de validade (equivalente a calculateExpirationStatus).
+    const [expired, critical, warning, valid] = await prisma.$transaction([
+      prisma.productBatch.updateMany({
+        where: { expirationDate: { lt: t0 }, status: { not: 'EXPIRED' } },
+        data: { status: 'EXPIRED' },
+      }),
+      prisma.productBatch.updateMany({
+        where: { expirationDate: { gte: t0, lt: t31 }, status: { not: 'CRITICAL' } },
+        data: { status: 'CRITICAL' },
+      }),
+      prisma.productBatch.updateMany({
+        where: { expirationDate: { gte: t31, lt: t91 }, status: { not: 'WARNING' } },
+        data: { status: 'WARNING' },
+      }),
+      prisma.productBatch.updateMany({
+        where: { expirationDate: { gte: t91 }, status: { not: 'VALID' } },
+        data: { status: 'VALID' },
+      }),
+    ]);
+
+    const statusUpdated = expired.count + critical.count + warning.count + valid.count;
+
+    // Alertas: apenas lotes com estoque dentro da janela de 90 dias (ou vencidos).
+    const alertBatches = await prisma.productBatch.findMany({
+      where: { quantity: { gt: 0 }, expirationDate: { lt: t91 } },
+      select: { id: true, expirationDate: true },
+    });
+
+    const desired = alertBatches.flatMap((batch) =>
+      getApplicableAlertTypes(batch.expirationDate).map((alertType) => ({
+        batchId: batch.id,
+        alertType,
+      }))
+    );
+
+    const existing = await prisma.expirationAlert.findMany({
+      where: { batchId: { in: alertBatches.map((b) => b.id) } },
+      select: { batchId: true, alertType: true },
+    });
+    const existingKeys = new Set(existing.map((a) => `${a.batchId}:${a.alertType}`));
+
+    const toCreate = desired.filter((d) => !existingKeys.has(`${d.batchId}:${d.alertType}`));
+
+    if (toCreate.length > 0) {
+      await prisma.expirationAlert.createMany({ data: toCreate, skipDuplicates: true });
     }
 
-    return { processed: batches.length, statusUpdated: updated };
+    return { processed: alertBatches.length, statusUpdated, alertsCreated: toCreate.length };
   }
 
   /** FEFO: retorna lotes ordenados por validade (mais próximo primeiro) */

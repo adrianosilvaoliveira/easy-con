@@ -14,10 +14,13 @@ import {
 import { cn } from '@/utils/cn';
 import { useAuthStore } from '@/stores/authStore';
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { AppLogo } from '@/components/ui/AppLogo';
 import { ROUTE_PERMISSIONS } from '@/routes/routePermissions';
 import { UserMenu } from '@/components/layout/UserMenu';
+import api from '@/services/api';
+import { queryKeys } from '@/lib/queryKeys';
 
 // < 1024px → drawer | 1024–1279px → ícones | ≥ 1280px → texto em linha única
 
@@ -39,6 +42,7 @@ function NavItem({
   icon: Icon,
   end,
   onClick,
+  onMouseEnter,
   mode = 'full',
   variant = 'light',
 }: {
@@ -48,6 +52,7 @@ function NavItem({
   icon: React.ElementType;
   end?: boolean;
   onClick?: () => void;
+  onMouseEnter?: () => void;
   mode?: 'icon' | 'compact' | 'full';
   variant?: 'light' | 'dark';
 }) {
@@ -58,6 +63,7 @@ function NavItem({
       to={to}
       end={end}
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
       title={mode !== 'full' ? label : undefined}
       className={({ isActive }) =>
         cn(
@@ -90,10 +96,36 @@ function NavItem({
   );
 }
 
+const STOCK_ROUTES = ['/estoque', '/entradas', '/saidas', '/transferencias', '/inventario'];
+
 export function TopNav() {
   const { hasPermission } = useAuthStore();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  /** Aquece o cache da rota alvo ao passar o mouse, deixando a navegação instantânea. */
+  const prefetchRoute = (to: string) => {
+    if (to === '/') {
+      queryClient.prefetchQuery({
+        queryKey: ['dashboard'],
+        queryFn: () => api.get('/dashboard').then((r) => r.data.data),
+        staleTime: 2 * 60_000,
+      });
+    } else if (to === '/vencimentos') {
+      queryClient.prefetchQuery({
+        queryKey: ['batches-dashboard'],
+        queryFn: () => api.get('/batches/dashboard').then((r) => r.data.data),
+        staleTime: 2 * 60_000,
+      });
+    } else if (STOCK_ROUTES.includes(to)) {
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.stockLocations,
+        queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
+        staleTime: 5 * 60_000,
+      });
+    }
+  };
 
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isNavText = useMediaQuery('(min-width: 1280px)');
@@ -155,6 +187,7 @@ export function TopNav() {
                   end={to === '/'}
                   mode={navMode}
                   variant="dark"
+                  onMouseEnter={() => prefetchRoute(to)}
                 />
               ))}
             </nav>

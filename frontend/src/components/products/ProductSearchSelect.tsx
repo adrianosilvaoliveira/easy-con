@@ -1,11 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, X, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { formatProductName } from '@/utils/format';
 import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/services/api';
-import { ProductFormModal, type CreatedProduct } from './ProductFormModal';
+import type { CreatedProduct } from './ProductFormModal';
+
+const ProductFormModal = lazy(() =>
+  import('./ProductFormModal').then((m) => ({ default: m.ProductFormModal }))
+);
 
 export interface ProductOption {
   id: string;
@@ -233,11 +237,15 @@ export function ProductSearchSelect({
         )}
       </div>
 
-      <ProductFormModal
-        open={productModalOpen}
-        onClose={() => setProductModalOpen(false)}
-        onSuccess={handleCreated}
-      />
+      {productModalOpen && (
+        <Suspense fallback={null}>
+          <ProductFormModal
+            open
+            onClose={() => setProductModalOpen(false)}
+            onSuccess={handleCreated}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

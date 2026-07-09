@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { AlertTriangle, Plus, Download, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
@@ -18,6 +18,10 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { Controller } from 'react-hook-form';
+import { useLocations } from '@/hooks/queries/useLocations';
+import { Pagination } from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 50;
 
 interface ProductBatch {
   id: string;
@@ -50,15 +54,20 @@ export function ExpirationsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editBatch, setEditBatch] = useState<ProductBatch | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const debouncedSearch = useDebounce(search, 350);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab, debouncedSearch, statusFilter, includeInactive]);
 
   const endpoint =
     tab === 'expired' ? '/batches/expired' : tab === 'expiring' ? '/batches/expiring?days=90' : '/batches';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['batches', tab, debouncedSearch, statusFilter, includeInactive],
+    queryKey: ['batches', tab, debouncedSearch, statusFilter, includeInactive, page],
     queryFn: () =>
       api
         .get(endpoint, {
@@ -66,10 +75,12 @@ export function ExpirationsPage() {
             search: debouncedSearch,
             status: statusFilter || undefined,
             includeInactive: includeInactive ? 'true' : undefined,
-            limit: 100,
+            page,
+            limit: PAGE_SIZE,
           },
         })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const { data: metrics } = useQuery({
@@ -77,10 +88,7 @@ export function ExpirationsPage() {
     queryFn: () => api.get('/batches/dashboard').then((r) => r.data.data),
   });
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-  });
+  const { data: locations } = useLocations();
 
   const { register, handleSubmit, reset, control } = useForm<z.infer<typeof batchSchema>>({
     resolver: zodResolver(batchSchema),
@@ -241,6 +249,8 @@ export function ExpirationsPage() {
           )},
         ]}
       />
+
+      <Pagination meta={data?.meta} page={page} onPageChange={setPage} loading={isLoading} />
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo Lote" size="lg">
         <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">

@@ -1,7 +1,5 @@
-import { useState } from 'react';
-import { ExpirationAlertsModal } from '@/components/alerts/ExpirationAlertsModal';
+import { Suspense, lazy, useState } from 'react';
 import { cn } from '@/utils/cn';
-import { useQuery } from '@tanstack/react-query';
 import {
   Package,
   MapPin,
@@ -24,7 +22,6 @@ import {
   Legend,
 } from 'recharts';
 import { ChartContainer } from '@/components/ui/ChartContainer';
-import api from '@/services/api';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import { Badge } from '@/components/ui/Badge';
 import { ExpirationBadge, ExpirationStatusType } from '@/components/expiration/ExpirationBadge';
@@ -33,10 +30,21 @@ import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { DashboardMetrics, EntriesExitsChartData, StockMovement } from '@/types';
+import type { StockMovement } from '@/types';
 import { ChartPeriodFilter, type ChartPeriod } from '@/components/dashboard/ChartPeriodFilter';
 import { formatDate, formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import { useChartTheme } from '@/constants/chartTheme';
+import {
+  useDashboardMetrics,
+  useDashboardChart,
+  useBatchesDashboard,
+} from '@/hooks/queries/useDashboard';
+
+const ExpirationAlertsModal = lazy(() =>
+  import('@/components/alerts/ExpirationAlertsModal').then((m) => ({
+    default: m.ExpirationAlertsModal,
+  }))
+);
 
 function KpiCard({
   title,
@@ -98,30 +106,9 @@ export function DashboardPage() {
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
   const [alertsModalOpen, setAlertsModalOpen] = useState(false);
 
-  const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => api.get<{ data: DashboardMetrics }>('/dashboard').then((r) => r.data.data),
-    retry: (failureCount, err) => {
-      const status = (err as { response?: { status?: number } }).response?.status;
-      if (status === 401 || status === 403 || status === 503) return false;
-      return failureCount < 1;
-    },
-  });
-
-  const { data: chartResponse, isLoading: chartLoading } = useQuery({
-    queryKey: ['dashboard', 'entries-exits-chart', chartPeriod],
-    queryFn: () =>
-      api
-        .get<{ data: EntriesExitsChartData }>('/dashboard/entries-exits-chart', {
-          params: { period: chartPeriod },
-        })
-        .then((r) => r.data.data),
-  });
-
-  const { data: expMetrics } = useQuery({
-    queryKey: ['batches-dashboard'],
-    queryFn: () => api.get('/batches/dashboard').then((r) => r.data.data),
-  });
+  const { data, isPending, isError, error, refetch } = useDashboardMetrics();
+  const { data: chartResponse, isLoading: chartLoading } = useDashboardChart(chartPeriod);
+  const { data: expMetrics } = useBatchesDashboard();
 
   const pendingAlertsCount = expMetrics?.counts?.alertsCount ?? 0;
 
@@ -423,7 +410,11 @@ export function DashboardPage() {
           emptyTitle="Sem movimentações recentes"
         />
       </div>
-      <ExpirationAlertsModal open={alertsModalOpen} onClose={() => setAlertsModalOpen(false)} />
+      {alertsModalOpen && (
+        <Suspense fallback={null}>
+          <ExpirationAlertsModal open onClose={() => setAlertsModalOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

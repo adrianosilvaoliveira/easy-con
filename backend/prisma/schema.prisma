@@ -92,6 +92,8 @@ model User {
   role              Role           @relation(fields: [roleId], references: [id])
   /** Quando true, usa permissões em customPermissions em vez do perfil */
   useCustomAccess   Boolean        @default(false)
+  /** Incrementado quando permissões/perfil mudam, para invalidar claims em tokens ativos */
+  permissionsVersion Int           @default(0)
   customPermissions UserPermission[]
   refreshTokens     RefreshToken[]
   passwordResets    PasswordReset[]

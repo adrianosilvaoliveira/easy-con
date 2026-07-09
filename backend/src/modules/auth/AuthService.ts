@@ -33,6 +33,18 @@ export class AuthService {
     };
   }
 
+  private static buildAccessPayload(user: UserWithAuthRelations) {
+    return {
+      sub: user.id,
+      email: user.email,
+      roleId: user.roleId,
+      name: user.name,
+      roleName: user.role.name,
+      permissions: resolvePermissionsFromUser(user),
+      pv: user.permissionsVersion,
+    };
+  }
+
   static async login(data: LoginDTO, ip?: string, userAgent?: string) {
     const user = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
@@ -48,9 +60,12 @@ export class AuthService {
       throw new UnauthorizedError('Credenciais inválidas');
     }
 
-    const payload = { sub: user.id, email: user.email, roleId: user.roleId };
-    const accessToken = JwtProvider.signAccessToken(payload);
-    const refreshToken = JwtProvider.signRefreshToken(payload);
+    const accessToken = JwtProvider.signAccessToken(this.buildAccessPayload(user));
+    const refreshToken = JwtProvider.signRefreshToken({
+      sub: user.id,
+      email: user.email,
+      roleId: user.roleId,
+    });
 
     await prisma.refreshToken.create({
       data: {
@@ -93,13 +108,13 @@ export class AuthService {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub, active: true },
+      include: userAuthInclude,
     });
 
     if (!user) throw new UnauthorizedError('Usuário inválido');
 
-    const tokenPayload = { sub: user.id, email: user.email, roleId: user.roleId };
     return {
-      accessToken: JwtProvider.signAccessToken(tokenPayload),
+      accessToken: JwtProvider.signAccessToken(this.buildAccessPayload(user)),
       refreshToken,
     };
   }
