@@ -131,6 +131,22 @@ export class MovementService {
     }
     await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
   }
+  private static async assertTransferStockAvailable(data: TransferDTO) {
+    if (data.batchId) {
+      const item = await prisma.stockItem.findFirst({
+        where: {
+          productId: data.productId,
+          locationId: data.originLocationId,
+          batchId: data.batchId,
+        },
+      });
+      if (!item || item.quantity < data.quantity) {
+        throw new ValidationError('Quantidade insuficiente no estoque de origem');
+      }
+      return;
+    }
+    await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
+  }
   static async createEntry(data: EntryDTO, userId: string) {
     if (await this.requiresApproval(userId)) {
       return this.createPendingEntry(data, userId);
@@ -344,6 +360,7 @@ export class MovementService {
     });
   }
   static async createTransfer(data: TransferDTO, userId: string) {
+    await this.assertTransferStockAvailable(data);
     if (await this.requiresApproval(userId)) {
       return prisma.stockMovement.create({
         data: {
@@ -362,49 +379,91 @@ export class MovementService {
         include: movementInclude,
       });
     }
-    const item = await prisma.stockItem.findFirst({
-      where: {
-        productId: data.productId,
-        locationId: data.originLocationId,
-        batchId: data.batchId ?? null,
-      },
-    });
-    if (!item || item.quantity < data.quantity) {
-      throw new ValidationError('Quantidade insuficiente no estoque de origem');
-    }
-    return prisma.$transaction(async (tx) => {
-      await this.updateStockInTx(
-        tx,
-        data.productId,
-        data.originLocationId,
-        data.batchId,
-        -data.quantity
-      );
-      await this.updateStockInTx(
-        tx,
-        data.productId,
-        data.destinationLocationId,
-        data.batchId,
-        data.quantity
-      );
-      return tx.stockMovement.create({
-        data: {
-          type: 'TRANSFERENCIA',
-          status: 'APROVADA',
-          productId: data.productId,
-          batchId: data.batchId,
-          quantity: data.quantity,
-          originLocationId: data.originLocationId,
-          destinationLocationId: data.destinationLocationId,
-          reason: data.reason,
-          notes: data.notes,
-          movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
-          userId,
-          approvedById: userId,
-          approvedAt: new Date(),
-        },
-        include: movementInclude,
+    return this.executeTransfer(data, userId);
+  }
+  private static async executeTransfer(data: TransferDTO, userId: string) {
+    const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
+    const approvedAt = new Date();
+    if (data.batchId) {
+      return prisma.$transaction(async (tx) => {
+        await this.updateStockInTx(
+          tx,
+          data.productId,
+          data.originLocationId,
+          data.batchId,
+          -data.quantity
+        );
+        await this.updateStockInTx(
+          tx,
+          data.productId,
+          data.destinationLocationId,
+          data.batchId,
+          data.quantity
+        );
+        return tx.stockMovement.create({
+          data: {
+            type: 'TRANSFERENCIA',
+            status: 'APROVADA',
+            productId: data.productId,
+            batchId: data.batchId,
+            quantity: data.quantity,
+            originLocationId: data.originLocationId,
+            destinationLocationId: data.destinationLocationId,
+            reason: data.reason,
+            notes: data.notes,
+            movementDate,
+            userId,
+            approvedById: userId,
+            approvedAt,
+          },
+          include: movementInclude,
+        });
       });
+    }
+    const fefoPlan = await BatchService.getFefoBatches(
+      data.productId,
+      data.originLocationId,
+      data.quantity
+    );
+    return prisma.$transaction(async (tx) => {
+      const movements = [];
+      for (const slice of fefoPlan) {
+        const mov = await tx.stockMovement.create({
+          data: {
+            type: 'TRANSFERENCIA',
+            status: 'APROVADA',
+            productId: data.productId,
+            batchId: slice.batchId,
+            quantity: slice.quantity,
+            originLocationId: data.originLocationId,
+            destinationLocationId: data.destinationLocationId,
+            reason: data.reason || `FEFO - Lote ${slice.batch.batchNumber}`,
+            notes: data.notes,
+            movementDate,
+            userId,
+            approvedById: userId,
+            approvedAt,
+          },
+          include: movementInclude,
+        });
+        await this.updateStockInTx(
+          tx,
+          data.productId,
+          data.originLocationId,
+          slice.batchId,
+          -slice.quantity
+        );
+        await this.updateStockInTx(
+          tx,
+          data.productId,
+          data.destinationLocationId,
+          slice.batchId,
+          slice.quantity
+        );
+        await BatchService.syncBatchQuantity(slice.batchId, tx);
+        movements.push(mov);
+      }
+      return { ...movements[0], fefoAllocations: movements };
     });
   }
   static async approveMovement(
@@ -619,31 +678,108 @@ export class MovementService {
     if (!approved) {
       return this.rejectMovement(movement.id, approverId, notes, movement.notes);
     }
-    return prisma.$transaction(async (tx) => {
-      await this.updateStockInTx(
-        tx,
-        movement.productId,
-        movement.originLocationId!,
-        movement.batchId,
-        -movement.quantity
-      );
-      await this.updateStockInTx(
-        tx,
-        movement.productId,
-        movement.destinationLocationId!,
-        movement.batchId,
-        movement.quantity
-      );
-      return tx.stockMovement.update({
-        where: { id: movement.id },
-        data: {
-          status: 'APROVADA',
-          approvedById: approverId,
-          approvedAt: new Date(),
-          notes: notes || movement.notes,
-        },
-        include: movementInclude,
+    if (!movement.originLocationId || !movement.destinationLocationId) {
+      throw new ValidationError('Origem e destino são obrigatórios');
+    }
+    const transferData: TransferDTO = {
+      type: 'TRANSFERENCIA',
+      productId: movement.productId,
+      originLocationId: movement.originLocationId,
+      destinationLocationId: movement.destinationLocationId,
+      quantity: movement.quantity,
+      batchId: movement.batchId ?? undefined,
+      reason: movement.reason ?? undefined,
+      notes: movement.notes ?? undefined,
+    };
+    await this.assertTransferStockAvailable(transferData);
+    if (transferData.batchId) {
+      return prisma.$transaction(async (tx) => {
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId!,
+          transferData.batchId,
+          -movement.quantity
+        );
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.destinationLocationId!,
+          transferData.batchId,
+          movement.quantity
+        );
+        return tx.stockMovement.update({
+          where: { id: movement.id },
+          data: {
+            status: 'APROVADA',
+            approvedById: approverId,
+            approvedAt: new Date(),
+            notes: notes || movement.notes,
+          },
+          include: movementInclude,
+        });
       });
+    }
+    const fefoPlan = await BatchService.getFefoBatches(
+      movement.productId,
+      movement.originLocationId,
+      movement.quantity
+    );
+    return prisma.$transaction(async (tx) => {
+      let first = true;
+      let primary = null;
+      for (const slice of fefoPlan) {
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.originLocationId!,
+          slice.batchId,
+          -slice.quantity
+        );
+        await this.updateStockInTx(
+          tx,
+          movement.productId,
+          movement.destinationLocationId!,
+          slice.batchId,
+          slice.quantity
+        );
+        await BatchService.syncBatchQuantity(slice.batchId, tx);
+        if (first) {
+          primary = await tx.stockMovement.update({
+            where: { id: movement.id },
+            data: {
+              status: 'APROVADA',
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              reason: movement.reason || `FEFO - Lote ${slice.batch.batchNumber}`,
+              approvedById: approverId,
+              approvedAt: new Date(),
+              notes: notes || movement.notes,
+            },
+            include: movementInclude,
+          });
+          first = false;
+        } else {
+          await tx.stockMovement.create({
+            data: {
+              type: 'TRANSFERENCIA',
+              status: 'APROVADA',
+              productId: movement.productId,
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              originLocationId: movement.originLocationId!,
+              destinationLocationId: movement.destinationLocationId!,
+              reason: movement.reason || `FEFO - Lote ${slice.batch.batchNumber}`,
+              notes: movement.notes,
+              movementDate: movement.movementDate,
+              userId: movement.userId,
+              approvedById: approverId,
+              approvedAt: new Date(),
+            },
+          });
+        }
+      }
+      return primary!;
     });
   }
   static async list(filters: Record<string, string | undefined>) {
