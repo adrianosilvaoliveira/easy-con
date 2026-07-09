@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,7 +13,6 @@ import { ActiveToggleField } from '@/components/ui/ActiveToggleField';
 import { formatProductName, formatProductNameInput } from '@/utils/format';
 import { CategoryFormModal } from '@/components/products/CategoryFormModal';
 import { SupplierFormModal } from '@/components/suppliers/SupplierFormModal';
-import { LocationFormModal } from '@/components/stock/LocationFormModal';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
 import { getApiErrorMessage } from '@/utils/apiError';
@@ -68,11 +67,9 @@ export function ProductFormModal({
   const queryClient = useQueryClient();
   const canCreateCategory = useAuthStore((s) => s.hasPermission('products:CREATE'));
   const canCreateSupplier = useAuthStore((s) => s.hasPermission('products:CREATE'));
-  const canCreateLocation = useAuthStore((s) => s.hasPermission('stock:CREATE'));
   const [active, setActive] = useState(true);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
-  const [locationModalOpen, setLocationModalOpen] = useState(false);
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -90,18 +87,20 @@ export function ProductFormModal({
     staleTime: 60_000,
   });
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
-    enabled: open,
-    staleTime: 60_000,
-  });
-
   const { data: product, isLoading: loadingProduct } = useQuery({
     queryKey: ['product', productId],
     queryFn: () => api.get(`/products/${productId}`).then((r) => r.data.data),
     enabled: open && !!productId,
   });
+
+  const stockLocationLabel = useMemo(() => {
+    const items = product?.stockItems as { quantity: number; location: { name: string } }[] | undefined;
+    if (!items?.length) return '';
+    return items
+      .filter((i) => i.quantity > 0)
+      .map((i) => `${i.location.name} (${i.quantity} un.)`)
+      .join(' · ');
+  }, [product]);
 
   const {
     register,
@@ -126,7 +125,6 @@ export function ProductFormModal({
         manufacturer: product.manufacturer || '',
         unit: product.unit || 'UN',
         minQuantity: product.minQuantity,
-        location: product.location || '',
         notes: product.notes || '',
       });
       setActive(product.active ?? true);
@@ -166,14 +164,15 @@ export function ProductFormModal({
   });
 
   const onSubmit = (data: ProductFormData) => {
-    const trimmedCode = data.internalCode?.trim();
+    const { location: _location, ...rest } = data;
+    const trimmedCode = rest.internalCode?.trim();
     if (isEdit && !trimmedCode) {
       toast.error('Código interno obrigatório');
       return;
     }
     const payload = {
-      ...data,
-      name: formatProductName(data.name),
+      ...rest,
+      name: formatProductName(rest.name),
       ...(trimmedCode ? { internalCode: trimmedCode } : {}),
     };
     if (isEdit) {
@@ -318,46 +317,17 @@ export function ProductFormModal({
           </div>
           <Input label="Unidade" {...register('unit')} />
           <Input label="Qtd. Mínima" type="number" {...register('minQuantity')} />
-          <div>
-            <label className="form-label" htmlFor="product-location">
-              Localização
-            </label>
-            <div
-              className={cn(
-                'flex overflow-hidden rounded-lg border bg-white shadow-sm focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 dark:bg-slate-800',
-                'border-surface-border dark:border-slate-600'
-              )}
-            >
-              <Controller
-                name="location"
-                control={control}
-                render={({ field }) => (
-                  <select
-                    {...field}
-                    id="product-location"
-                    className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-0 dark:text-slate-100"
-                  >
-                    <option value="">Selecione...</option>
-                    {selectOptionValues(locations, field.value).map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              />
-              {canCreateLocation && (
-                <button
-                  type="button"
-                  onClick={() => setLocationModalOpen(true)}
-                  className="flex w-10 shrink-0 items-center justify-center border-l border-surface-border bg-primary-50 text-primary-600 transition hover:bg-primary-100 dark:border-slate-600 dark:bg-primary-950/50 dark:text-primary-400 dark:hover:bg-primary-900/50"
-                  title="Cadastrar novo local de estoque"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-              )}
+          {isEdit && (
+            <div>
+              <label className="form-label">Localização em estoque</label>
+              <p className="rounded-lg border border-surface-border bg-slate-50/60 px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+                {stockLocationLabel || 'Sem saldo em estoque'}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Para alterar o local, use Transferências.
+              </p>
             </div>
-          </div>
+          )}
           <div className="sm:col-span-2">
             <Input label="Observações" {...register('notes')} />
           </div>
@@ -377,14 +347,6 @@ export function ProductFormModal({
       onSuccess={(supplier) => {
         queryClient.invalidateQueries({ queryKey: ['suppliers'] });
         setValue('manufacturer', supplier.name, { shouldValidate: true });
-      }}
-    />
-    <LocationFormModal
-      open={locationModalOpen}
-      onClose={() => setLocationModalOpen(false)}
-      onSuccess={(location) => {
-        queryClient.invalidateQueries({ queryKey: ['locations'] });
-        setValue('location', location.name, { shouldValidate: true });
       }}
     />
   </>

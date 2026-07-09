@@ -58,10 +58,14 @@ export class MovementService {
     if (existing) {
       const newQty = existing.quantity + quantityDelta;
       if (newQty < 0) throw new ValidationError('Quantidade insuficiente em estoque');
-      await prisma.stockItem.update({
-        where: { id: existing.id },
-        data: { quantity: newQty },
-      });
+      if (newQty === 0) {
+        await prisma.stockItem.delete({ where: { id: existing.id } });
+      } else {
+        await prisma.stockItem.update({
+          where: { id: existing.id },
+          data: { quantity: newQty },
+        });
+      }
     } else if (quantityDelta > 0) {
       await prisma.stockItem.create({
         data: {
@@ -89,10 +93,14 @@ export class MovementService {
     if (existing) {
       const newQty = existing.quantity + quantityDelta;
       if (newQty < 0) throw new ValidationError('Quantidade insuficiente em estoque');
-      await tx.stockItem.update({
-        where: { id: existing.id },
-        data: { quantity: newQty },
-      });
+      if (newQty === 0) {
+        await tx.stockItem.delete({ where: { id: existing.id } });
+      } else {
+        await tx.stockItem.update({
+          where: { id: existing.id },
+          data: { quantity: newQty },
+        });
+      }
     } else if (quantityDelta > 0) {
       await tx.stockItem.create({
         data: { productId, locationId, batchId: batchKey, quantity: quantityDelta },

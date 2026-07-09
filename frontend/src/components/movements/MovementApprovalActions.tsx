@@ -27,6 +27,8 @@ export function MovementStatusBadge({ status }: { status: string }) {
 function invalidateMovementQueries(queryClient: ReturnType<typeof useQueryClient>, keys: string[]) {
   keys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   queryClient.invalidateQueries({ queryKey: ['stock'] });
+  queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+  queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
   queryClient.invalidateQueries({ queryKey: ['batches'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 }

@@ -97,125 +97,30 @@ export class ProductService {
     });
   }
 
-  static async update(id: string, data: UpdateProductDTO, userId?: string) {
-    const existing = await this.findById(id);
-    const normalized = data.name !== undefined ? { ...data, name: normalizeProductName(data.name) } : data;
-    const locationChanged =
-      data.location !== undefined &&
-      data.location.trim().toLowerCase() !== (existing.location ?? '').trim().toLowerCase();
-
-    let result;
-    if (data.internalCode !== undefined) {
-      const internalCode = normalizeInternalCode(data.internalCode);
+  static async update(id: string, data: UpdateProductDTO) {
+    await this.findById(id);
+    const { location: _location, ...dataWithoutLocation } = data;
+    const normalized =
+      dataWithoutLocation.name !== undefined
+        ? { ...dataWithoutLocation, name: normalizeProductName(dataWithoutLocation.name) }
+        : dataWithoutLocation;
+    if (dataWithoutLocation.internalCode !== undefined) {
+      const internalCode = normalizeInternalCode(dataWithoutLocation.internalCode);
       if (!internalCode) throw new ValidationError('Código interno obrigatório');
       const duplicate = await prisma.product.findFirst({
         where: { internalCode, NOT: { id } },
       });
       if (duplicate) throw new ValidationError('Código interno já existe');
-      result = await prisma.product.update({
+      return prisma.product.update({
         where: { id },
         data: { ...normalized, internalCode },
         include: { category: true },
       });
-    } else {
-      result = await prisma.product.update({
-        where: { id },
-        data: normalized,
-        include: { category: true },
-      });
     }
-
-    if (locationChanged && userId && data.location?.trim()) {
-      await this.relocateStockToLocation(id, data.location, userId);
-    }
-
-    return result;
-  }
-
-  /** Move saldo físico para o local informado no cadastro do produto. */
-  private static async relocateStockToLocation(
-    productId: string,
-    targetLocationName: string,
-    userId: string
-  ) {
-    const trimmed = targetLocationName.trim();
-    if (!trimmed) return;
-
-    const targetLocation = await prisma.stockLocation.findFirst({
-      where: {
-        active: true,
-        name: { equals: trimmed, mode: 'insensitive' },
-      },
-    });
-    if (!targetLocation) return;
-
-    const stockItems = await prisma.stockItem.findMany({
-      where: { productId, quantity: { gt: 0 } },
-      include: { batch: true },
-    });
-
-    const itemsToMove = stockItems.filter((item) => item.locationId !== targetLocation.id);
-    if (itemsToMove.length === 0) return;
-
-    await prisma.$transaction(async (tx) => {
-      for (const item of itemsToMove) {
-        if (!item.batchId || !item.batch) {
-          const existingAtTarget = await tx.stockItem.findFirst({
-            where: { productId, locationId: targetLocation.id, batchId: null },
-          });
-          if (existingAtTarget) {
-            await tx.stockItem.update({
-              where: { id: existingAtTarget.id },
-              data: { quantity: { increment: item.quantity } },
-            });
-          } else {
-            await tx.stockItem.create({
-              data: {
-                productId,
-                locationId: targetLocation.id,
-                batchId: null,
-                quantity: item.quantity,
-              },
-            });
-          }
-          await tx.stockItem.update({ where: { id: item.id }, data: { quantity: 0 } });
-          continue;
-        }
-
-        const sourceBatch = item.batch;
-        const targetBatch = await BatchService.findOrCreateForEntry(tx, {
-          productId,
-          stockLocationId: targetLocation.id,
-          batchNumber: sourceBatch.batchNumber,
-          expirationDate: sourceBatch.expirationDate,
-          manufacturingDate: sourceBatch.manufacturingDate,
-          quantity: item.quantity,
-          supplierId: sourceBatch.supplierId ?? undefined,
-          unitCost: sourceBatch.unitCost ? Number(sourceBatch.unitCost) : undefined,
-          userId,
-        });
-
-        await tx.stockItem.upsert({
-          where: {
-            productId_locationId_batchId: {
-              productId,
-              locationId: targetLocation.id,
-              batchId: targetBatch.id,
-            },
-          },
-          create: {
-            productId,
-            locationId: targetLocation.id,
-            batchId: targetBatch.id,
-            quantity: item.quantity,
-          },
-          update: { quantity: { increment: item.quantity } },
-        });
-
-        await tx.stockItem.update({ where: { id: item.id }, data: { quantity: 0 } });
-        await BatchService.syncBatchQuantity(sourceBatch.id, tx);
-        await BatchService.syncBatchQuantity(targetBatch.id, tx);
-      }
+    return prisma.product.update({
+      where: { id },
+      data: normalized,
+      include: { category: true },
     });
   }
 

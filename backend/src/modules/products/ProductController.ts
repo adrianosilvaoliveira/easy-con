@@ -20,7 +20,7 @@ export class ProductController {
   }
 
   static async update(req: Request, res: Response): Promise<void> {
-    const result = await ProductService.update(getParam(req, 'id'), req.body, req.user!.id);
+    const result = await ProductService.update(getParam(req, 'id'), req.body);
     res.json({ success: true, data: result });
   }
 

@@ -69,7 +69,10 @@ export function TransfersPage() {
           : 'Transferência efetivada'
       );
       queryClient.invalidateQueries({ queryKey: ['transfers'] });
-      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setModalOpen(false);
       reset();
     },
