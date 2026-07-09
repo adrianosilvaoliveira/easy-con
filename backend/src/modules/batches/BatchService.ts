@@ -10,6 +10,7 @@ import {
   daysUntilExpiration,
   getApplicableAlertTypes,
   validateExpirationDate,
+  validateManufacturingBeforeExpiration,
 } from '../../shared/utils/expiration';
 import { AuditService } from '../../services/AuditService';
 import { AlertService } from './AlertService';
@@ -233,13 +234,16 @@ export class BatchService {
   static async update(id: string, data: UpdateBatchDTO, userId: string) {
     const existing = await this.findById(id);
     const expirationDate = data.expirationDate ? new Date(data.expirationDate) : existing.expirationDate;
-    const manufacturingDate = data.manufacturingDate
-      ? new Date(data.manufacturingDate)
-      : existing.manufacturingDate;
+    const manufacturingDate =
+      data.manufacturingDate !== undefined
+        ? data.manufacturingDate
+          ? new Date(data.manufacturingDate)
+          : null
+        : existing.manufacturingDate;
 
-    if (data.expirationDate || data.manufacturingDate) {
+    if (data.expirationDate || data.manufacturingDate !== undefined) {
       try {
-        validateExpirationDate(expirationDate, manufacturingDate);
+        validateManufacturingBeforeExpiration(expirationDate, manufacturingDate);
       } catch (e) {
         throw new ValidationError((e as Error).message);
       }

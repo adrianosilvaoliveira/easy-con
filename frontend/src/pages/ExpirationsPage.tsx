@@ -13,6 +13,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatDate, formatProductName } from '@/utils/format';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { useAuthStore } from '@/stores/authStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
@@ -27,8 +28,9 @@ interface ProductBatch {
   id: string;
   batchNumber: string;
   expirationDate: string;
-  manufacturingDate?: string;
+  manufacturingDate?: string | null;
   quantity: number;
+  unitCost?: number | string | null;
   status: ExpirationStatusType;
   daysUntilExpiration?: number;
   product: { id: string; name: string; internalCode: string; category?: { name: string } };
@@ -36,12 +38,17 @@ interface ProductBatch {
   supplier?: { name: string };
 }
 
+function toDateInputValue(value?: string | null): string {
+  if (!value) return '';
+  return value.slice(0, 10);
+}
+
 const batchSchema = z.object({
   productId: z.string().uuid(),
   stockLocationId: z.string().uuid(),
   batchNumber: z.string().min(1),
   expirationDate: z.string().min(1),
-  manufacturingDate: z.string().min(1),
+  manufacturingDate: z.string().optional(),
   quantity: z.coerce.number().int().min(0),
   supplierId: z.string().optional(),
   unitCost: z.coerce.number().optional(),
@@ -103,8 +110,8 @@ export function ExpirationsPage() {
       setModalOpen(false);
       reset();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao salvar lote'),
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, 'Erro ao salvar lote')),
   });
 
   const updateMutation = useMutation({
@@ -115,8 +122,8 @@ export function ExpirationsPage() {
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       setEditBatch(null);
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao atualizar'),
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, 'Erro ao atualizar')),
   });
 
   const downloadPdf = async (type: string) => {
@@ -311,12 +318,42 @@ function BatchEditModal({
   loading: boolean;
 }) {
   const [batchNumber, setBatchNumber] = useState(batch.batchNumber);
-  const [expirationDate, setExpirationDate] = useState(batch.expirationDate.slice(0, 10));
+  const [expirationDate, setExpirationDate] = useState(toDateInputValue(batch.expirationDate));
   const [manufacturingDate, setManufacturingDate] = useState(
-    batch.manufacturingDate?.slice(0, 10) || ''
+    toDateInputValue(batch.manufacturingDate)
   );
   const [quantity, setQuantity] = useState(String(batch.quantity));
-  const [unitCost, setUnitCost] = useState('');
+  const [unitCost, setUnitCost] = useState(
+    batch.unitCost != null && batch.unitCost !== '' ? String(batch.unitCost) : ''
+  );
+
+  const handleSave = () => {
+    if (!batchNumber.trim()) {
+      toast.error('Informe o número do lote');
+      return;
+    }
+    if (!expirationDate) {
+      toast.error('Informe a data de validade');
+      return;
+    }
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty < 0 || !Number.isInteger(qty)) {
+      toast.error('Quantidade inválida');
+      return;
+    }
+    if (manufacturingDate && manufacturingDate >= expirationDate) {
+      toast.error('Data de fabricação deve ser anterior à validade');
+      return;
+    }
+
+    onSave({
+      batchNumber: batchNumber.trim(),
+      manufacturingDate: manufacturingDate || null,
+      expirationDate,
+      quantity: qty,
+      ...(unitCost !== '' ? { unitCost: Number(unitCost) } : {}),
+    });
+  };
 
   return (
     <Modal open onClose={onClose} title="Editar Lote" size="lg">
@@ -334,18 +371,7 @@ function BatchEditModal({
         </p>
         <div className="flex justify-end gap-2 sm:col-span-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button
-            loading={loading}
-            onClick={() =>
-              onSave({
-                batchNumber,
-                manufacturingDate,
-                expirationDate,
-                quantity: Number(quantity),
-                ...(unitCost ? { unitCost: Number(unitCost) } : {}),
-              })
-            }
-          >
+          <Button loading={loading} onClick={handleSave}>
             Salvar
           </Button>
         </div>

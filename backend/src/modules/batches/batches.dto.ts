@@ -1,12 +1,21 @@
 import { z } from 'zod';
 import { ExpirationStatus, ExpirationAlertType } from '@prisma/client';
 
+const optionalDateString = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    if (value === '' || value === null) return null;
+    return value;
+  });
+
 export const createBatchSchema = z.object({
   productId: z.string().uuid(),
   stockLocationId: z.string().uuid(),
   batchNumber: z.string().min(1).max(50),
-  expirationDate: z.string(),
-  manufacturingDate: z.string().optional(),
+  expirationDate: z.string().min(1),
+  manufacturingDate: optionalDateString,
   quantity: z.number().int().min(0).default(0),
   supplierId: z.string().uuid().optional(),
   unitCost: z.number().positive().optional(),
