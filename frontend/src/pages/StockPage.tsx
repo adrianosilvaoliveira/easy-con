@@ -159,10 +159,13 @@ export function StockPage() {
                     </Badge>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-primary-700 dark:text-primary-400">
+                    <p className="text-2xl font-bold leading-none text-primary-700 dark:text-primary-400">
                       {loc.totalQuantity ?? 0}
                     </p>
-                    <p className="text-xs text-slate-400">unidades</p>
+                    <p className="mt-1 text-xs text-slate-400">unidades</p>
+                    <p className="mt-0.5 text-[10px] leading-tight text-slate-400/75">
+                      {loc.productCount ?? 0} {(loc.productCount ?? 0) === 1 ? 'produto' : 'produtos'}
+                    </p>
                   </div>
                 </div>
               </div>

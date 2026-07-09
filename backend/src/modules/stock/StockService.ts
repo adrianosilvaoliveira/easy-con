@@ -23,15 +23,16 @@ export class StockService {
       },
       orderBy: { name: 'asc' },
       include: {
-        _count: { select: { stockItems: true } },
         stockItems: {
-          select: { quantity: true },
+          where: { quantity: { gt: 0 } },
+          select: { quantity: true, productId: true },
         },
       },
     }).then((locations) =>
       locations.map((loc) => ({
         ...loc,
         totalQuantity: loc.stockItems.reduce((s, i) => s + i.quantity, 0),
+        productCount: new Set(loc.stockItems.map((i) => i.productId)).size,
         stockItems: undefined,
       }))
     );

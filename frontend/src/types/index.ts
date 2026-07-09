@@ -70,6 +70,7 @@ export interface StockLocation {
   code: string;
   type: string;
   totalQuantity?: number;
+  productCount?: number;
 }
 
 export interface StockItem {
