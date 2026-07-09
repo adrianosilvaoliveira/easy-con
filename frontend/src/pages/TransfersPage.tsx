@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
-import type { StockMovement, PaginatedResponse } from '@/types';
+import type { StockMovement, PaginatedResponse, StockItem } from '@/types';
 import { formatDateTime, formatProductName } from '@/utils/format';
 import {
   MovementStatusBadge,
@@ -53,11 +53,50 @@ export function TransfersPage() {
     handleSubmit,
     reset,
     control,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<z.infer<typeof transferSchema>>({
     resolver: zodResolver(transferSchema),
     defaultValues: { type: 'TRANSFERENCIA', productId: '' },
   });
+
+  const watchedProductId = watch('productId');
+  const watchedOriginId = watch('originLocationId');
+
+  const { data: productStock } = useQuery({
+    queryKey: ['stock-items', 'transfer-origin', watchedProductId],
+    queryFn: () =>
+      api
+        .get('/stock/items', { params: { productId: watchedProductId, limit: 100 } })
+        .then((r) => r.data.data as StockItem[]),
+    enabled: modalOpen && !!watchedProductId,
+  });
+
+  const originOptions = useMemo(() => {
+    const byLocation = new Map<string, { id: string; name: string; quantity: number }>();
+    for (const item of productStock ?? []) {
+      if (item.quantity <= 0) continue;
+      const existing = byLocation.get(item.location.id);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        byLocation.set(item.location.id, {
+          id: item.location.id,
+          name: item.location.name,
+          quantity: item.quantity,
+        });
+      }
+    }
+    return [...byLocation.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [productStock]);
+
+  useEffect(() => {
+    if (!watchedOriginId) return;
+    if (!originOptions.some((o) => o.id === watchedOriginId)) {
+      setValue('originLocationId', '' as never);
+    }
+  }, [watchedOriginId, originOptions, setValue]);
 
   const createMutation = useMutation({
     mutationFn: (data: z.infer<typeof transferSchema>) => api.post('/movements/transfers', data),
@@ -125,7 +164,10 @@ export function TransfersPage() {
               render={({ field }) => (
                 <ProductSearchSelect
                   value={field.value}
-                  onChange={(id) => field.onChange(id)}
+                  onChange={(id) => {
+                    field.onChange(id);
+                    setValue('originLocationId', '' as never);
+                  }}
                   error={errors.productId?.message}
                   required
                 />
@@ -134,10 +176,22 @@ export function TransfersPage() {
           </div>
           <div>
             <label className="form-label">Origem</label>
-            <select className="input-field" {...register('originLocationId')}>
-              <option value="">Selecione...</option>
-              {locations?.map((l: { id: string; name: string }) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+            <select
+              className="input-field"
+              disabled={!watchedProductId}
+              {...register('originLocationId')}
+            >
+              <option value="">
+                {!watchedProductId
+                  ? 'Selecione o produto primeiro'
+                  : originOptions.length === 0
+                    ? 'Sem estoque disponível'
+                    : 'Selecione...'}
+              </option>
+              {originOptions.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.quantity} un.)
+                </option>
               ))}
             </select>
           </div>
@@ -145,9 +199,13 @@ export function TransfersPage() {
             <label className="form-label">Destino</label>
             <select className="input-field" {...register('destinationLocationId')}>
               <option value="">Selecione...</option>
-              {locations?.map((l: { id: string; name: string }) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
+              {locations
+                ?.filter((l: { id: string }) => l.id !== watchedOriginId)
+                .map((l: { id: string; name: string }) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
             </select>
           </div>
           <Input label="Quantidade" type="number" {...register('quantity')} />
