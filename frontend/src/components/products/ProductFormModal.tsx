@@ -156,6 +156,9 @@ export function ProductFormModal({
       toast.success('Produto atualizado');
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-locations'] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
       onSuccess?.(res.data.data);
       onClose();
     },
