@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,19 +19,29 @@ import {
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
+import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { useLocations } from '@/hooks/queries/useLocations';
+import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { Pagination } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
+
+const optionalUuid = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : v),
+  z.string().uuid().optional()
+);
 
 const exitSchema = z.object({
   type: z.enum(['SAIDA_CONSUMO', 'SAIDA_CIRURGIA', 'SAIDA_CONSULTA', 'SAIDA_PERDA', 'SAIDA_VENCIMENTO']),
   productId: z.string().uuid(),
   originLocationId: z.string().uuid(),
+  batchId: optionalUuid,
   quantity: z.coerce.number().int().positive(),
   reason: z.string().optional(),
   notes: z.string().optional(),
 });
+
+type ExitForm = z.infer<typeof exitSchema>;
 
 export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -57,23 +67,62 @@ export function ExitsPage() {
     handleSubmit,
     reset,
     control,
+    watch,
+    setValue,
+    setError,
+    clearErrors,
     formState: { errors },
-  } = useForm<z.infer<typeof exitSchema>>({
+  } = useForm<ExitForm>({
     resolver: zodResolver(exitSchema),
-    defaultValues: { type: 'SAIDA_CONSUMO', productId: '' },
+    defaultValues: { type: 'SAIDA_CONSUMO', productId: '', batchId: undefined },
   });
 
+  const watchedProductId = watch('productId');
+  const watchedOriginId = watch('originLocationId');
+
+  const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
+    watchedProductId,
+    watchedOriginId,
+    modalOpen
+  );
+
+  useEffect(() => {
+    setValue('batchId', undefined);
+    clearErrors('batchId');
+  }, [watchedProductId, watchedOriginId, setValue, clearErrors]);
+
+  useEffect(() => {
+    if (lots.length === 1) {
+      setValue('batchId', lots[0].batchId);
+    }
+  }, [lots, setValue]);
+
   const mutation = useMutation({
-    mutationFn: (data: z.infer<typeof exitSchema>) => api.post('/movements/exits', data),
+    mutationFn: (data: ExitForm) =>
+      api.post('/movements/exits', {
+        ...data,
+        batchId: data.batchId || undefined,
+      }),
     onSuccess: (res) => {
       const pendingApproval = res.data.data?.pendingApproval;
       toast.success(pendingApproval ? 'Saída enviada para aprovação' : 'Saída registrada');
       queryClient.invalidateQueries({ queryKey: ['exits'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
       setModalOpen(false);
       reset();
     },
-    onError: () => toast.error('Erro ao registrar saída'),
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err.response?.data?.message || 'Erro ao registrar saída'),
   });
+
+  const onSubmit = (data: ExitForm) => {
+    if (hasMultipleLots && !data.batchId) {
+      setError('batchId', { message: 'Selecione o lote para a movimentação' });
+      return;
+    }
+    mutation.mutate(data);
+  };
 
   return (
     <div className="page-content">
@@ -114,7 +163,7 @@ export function ExitsPage() {
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Saída" size="lg">
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="form-label">Tipo</label>
             <select className="input-field" {...register('type')}>
@@ -132,7 +181,11 @@ export function ExitsPage() {
               render={({ field }) => (
                 <ProductSearchSelect
                   value={field.value}
-                  onChange={(id) => field.onChange(id)}
+                  onChange={(id) => {
+                    field.onChange(id);
+                    setValue('originLocationId', '' as never);
+                    setValue('batchId', undefined);
+                  }}
                   error={errors.productId?.message}
                   required
                 />
@@ -141,13 +194,31 @@ export function ExitsPage() {
           </div>
           <div>
             <label className="form-label">Origem</label>
-            <select className="input-field" {...register('originLocationId')}>
+            <select
+              className="input-field"
+              {...register('originLocationId', {
+                onChange: () => setValue('batchId', undefined),
+              })}
+            >
               <option value="">Selecione...</option>
               {locations?.map((l: { id: string; name: string }) => (
                 <option key={l.id} value={l.id}>{l.name}</option>
               ))}
             </select>
           </div>
+          <Controller
+            name="batchId"
+            control={control}
+            render={({ field }) => (
+              <BatchSelectField
+                lots={lots}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.batchId?.message}
+                loading={lotsLoading}
+              />
+            )}
+          />
           <Input label="Quantidade" type="number" {...register('quantity')} />
           <Input label="Motivo" {...register('reason')} />
           <div className="sm:col-span-2 flex justify-end gap-2">

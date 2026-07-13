@@ -17,21 +17,31 @@ import {
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
+import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { useLocations } from '@/hooks/queries/useLocations';
+import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { queryKeys } from '@/lib/queryKeys';
 import { Pagination } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
+
+const optionalUuid = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : v),
+  z.string().uuid().optional()
+);
 
 const transferSchema = z.object({
   type: z.literal('TRANSFERENCIA'),
   productId: z.string().uuid(),
   originLocationId: z.string().uuid(),
   destinationLocationId: z.string().uuid(),
+  batchId: optionalUuid,
   quantity: z.coerce.number().int().positive(),
   reason: z.string().optional(),
 });
+
+type TransferForm = z.infer<typeof transferSchema>;
 
 export function TransfersPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -60,10 +70,12 @@ export function TransfersPage() {
     control,
     watch,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors },
-  } = useForm<z.infer<typeof transferSchema>>({
+  } = useForm<TransferForm>({
     resolver: zodResolver(transferSchema),
-    defaultValues: { type: 'TRANSFERENCIA', productId: '' },
+    defaultValues: { type: 'TRANSFERENCIA', productId: '', batchId: undefined },
   });
 
   const watchedProductId = watch('productId');
@@ -96,6 +108,12 @@ export function TransfersPage() {
     return [...byLocation.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [productStock]);
 
+  const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
+    watchedProductId,
+    watchedOriginId,
+    modalOpen
+  );
+
   useEffect(() => {
     if (!watchedOriginId) return;
     if (!originOptions.some((o) => o.id === watchedOriginId)) {
@@ -103,8 +121,23 @@ export function TransfersPage() {
     }
   }, [watchedOriginId, originOptions, setValue]);
 
+  useEffect(() => {
+    setValue('batchId', undefined);
+    clearErrors('batchId');
+  }, [watchedProductId, watchedOriginId, setValue, clearErrors]);
+
+  useEffect(() => {
+    if (lots.length === 1) {
+      setValue('batchId', lots[0].batchId);
+    }
+  }, [lots, setValue]);
+
   const createMutation = useMutation({
-    mutationFn: (data: z.infer<typeof transferSchema>) => api.post('/movements/transfers', data),
+    mutationFn: (data: TransferForm) =>
+      api.post('/movements/transfers', {
+        ...data,
+        batchId: data.batchId || undefined,
+      }),
     onSuccess: (res) => {
       const status = res.data.data?.status;
       toast.success(
@@ -123,6 +156,14 @@ export function TransfersPage() {
     onError: (err: { response?: { data?: { message?: string } } }) =>
       toast.error(err.response?.data?.message || 'Erro ao registrar transferência'),
   });
+
+  const onSubmit = (data: TransferForm) => {
+    if (hasMultipleLots && !data.batchId) {
+      setError('batchId', { message: 'Selecione o lote para a movimentação' });
+      return;
+    }
+    createMutation.mutate(data);
+  };
 
   return (
     <div className="page-content">
@@ -163,7 +204,7 @@ export function TransfersPage() {
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Transferência" size="lg">
-        <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Controller
               name="productId"
@@ -174,6 +215,7 @@ export function TransfersPage() {
                   onChange={(id) => {
                     field.onChange(id);
                     setValue('originLocationId', '' as never);
+                    setValue('batchId', undefined);
                   }}
                   error={errors.productId?.message}
                   required
@@ -186,7 +228,9 @@ export function TransfersPage() {
             <select
               className="input-field"
               disabled={!watchedProductId}
-              {...register('originLocationId')}
+              {...register('originLocationId', {
+                onChange: () => setValue('batchId', undefined),
+              })}
             >
               <option value="">
                 {!watchedProductId
@@ -215,6 +259,19 @@ export function TransfersPage() {
                 ))}
             </select>
           </div>
+          <Controller
+            name="batchId"
+            control={control}
+            render={({ field }) => (
+              <BatchSelectField
+                lots={lots}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.batchId?.message}
+                loading={lotsLoading}
+              />
+            )}
+          />
           <Input label="Quantidade" type="number" {...register('quantity')} />
           <Input label="Motivo" {...register('reason')} />
           <div className="sm:col-span-2 flex justify-end gap-2">
