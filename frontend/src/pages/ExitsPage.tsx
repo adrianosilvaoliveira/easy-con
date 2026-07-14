@@ -20,8 +20,8 @@ import {
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { BatchSelectField } from '@/components/movements/BatchSelectField';
-import { useLocations } from '@/hooks/queries/useLocations';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
+import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
 import { Pagination } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
@@ -48,8 +48,6 @@ export function ExitsPage() {
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
-
-  const { data: locations } = useLocations();
 
   const { data, isLoading } = useQuery({
     queryKey: ['exits', page],
@@ -80,11 +78,23 @@ export function ExitsPage() {
   const watchedProductId = watch('productId');
   const watchedOriginId = watch('originLocationId');
 
+  const { origins, isLoading: originsLoading } = useProductStockOrigins(
+    watchedProductId,
+    modalOpen
+  );
+
   const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
     watchedProductId,
     watchedOriginId,
     modalOpen
   );
+
+  useEffect(() => {
+    if (!watchedOriginId) return;
+    if (!origins.some((o) => o.id === watchedOriginId)) {
+      setValue('originLocationId', '' as never);
+    }
+  }, [watchedOriginId, origins, setValue]);
 
   useEffect(() => {
     setValue('batchId', undefined);
@@ -196,13 +206,24 @@ export function ExitsPage() {
             <label className="form-label">Origem</label>
             <select
               className="input-field"
+              disabled={!watchedProductId || originsLoading}
               {...register('originLocationId', {
                 onChange: () => setValue('batchId', undefined),
               })}
             >
-              <option value="">Selecione...</option>
-              {locations?.map((l: { id: string; name: string }) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
+              <option value="">
+                {!watchedProductId
+                  ? 'Selecione o produto primeiro'
+                  : originsLoading
+                    ? 'Carregando estoque...'
+                    : origins.length === 0
+                      ? 'Sem estoque disponível'
+                      : 'Selecione...'}
+              </option>
+              {origins.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.quantity} un.)
+                </option>
               ))}
             </select>
           </div>

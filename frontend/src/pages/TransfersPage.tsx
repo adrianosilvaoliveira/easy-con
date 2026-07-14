@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
-import type { StockMovement, PaginatedResponse, StockItem } from '@/types';
+import type { StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, formatProductName } from '@/utils/format';
 import {
   MovementStatusBadge,
@@ -21,6 +21,7 @@ import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { useLocations } from '@/hooks/queries/useLocations';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
+import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
 import { queryKeys } from '@/lib/queryKeys';
 import { Pagination } from '@/components/ui/Pagination';
 
@@ -81,32 +82,10 @@ export function TransfersPage() {
   const watchedProductId = watch('productId');
   const watchedOriginId = watch('originLocationId');
 
-  const { data: productStock } = useQuery({
-    queryKey: ['stock-items', 'transfer-origin', watchedProductId],
-    queryFn: () =>
-      api
-        .get('/stock/items', { params: { productId: watchedProductId, limit: 100 } })
-        .then((r) => r.data.data as StockItem[]),
-    enabled: modalOpen && !!watchedProductId,
-  });
-
-  const originOptions = useMemo(() => {
-    const byLocation = new Map<string, { id: string; name: string; quantity: number }>();
-    for (const item of productStock ?? []) {
-      if (item.quantity <= 0) continue;
-      const existing = byLocation.get(item.location.id);
-      if (existing) {
-        existing.quantity += item.quantity;
-      } else {
-        byLocation.set(item.location.id, {
-          id: item.location.id,
-          name: item.location.name,
-          quantity: item.quantity,
-        });
-      }
-    }
-    return [...byLocation.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [productStock]);
+  const { origins: originOptions, isLoading: originsLoading } = useProductStockOrigins(
+    watchedProductId,
+    modalOpen
+  );
 
   const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
     watchedProductId,
@@ -227,7 +206,7 @@ export function TransfersPage() {
             <label className="form-label">Origem</label>
             <select
               className="input-field"
-              disabled={!watchedProductId}
+              disabled={!watchedProductId || originsLoading}
               {...register('originLocationId', {
                 onChange: () => setValue('batchId', undefined),
               })}
@@ -235,9 +214,11 @@ export function TransfersPage() {
               <option value="">
                 {!watchedProductId
                   ? 'Selecione o produto primeiro'
-                  : originOptions.length === 0
-                    ? 'Sem estoque disponível'
-                    : 'Selecione...'}
+                  : originsLoading
+                    ? 'Carregando estoque...'
+                    : originOptions.length === 0
+                      ? 'Sem estoque disponível'
+                      : 'Selecione...'}
               </option>
               {originOptions.map((l) => (
                 <option key={l.id} value={l.id}>
