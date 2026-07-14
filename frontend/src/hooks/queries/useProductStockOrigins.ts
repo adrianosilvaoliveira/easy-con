@@ -17,7 +17,7 @@ export function useProductStockOrigins(productId: string | undefined, enabled = 
     queryKey: ['stock-items', 'product-origins', productId],
     queryFn: () =>
       api
-        .get('/stock/items', { params: { productId, limit: 100 } })
+        .get('/stock/items', { params: { productId, limit: 500 } })
         .then((r) => r.data.data as StockItem[]),
     enabled: enabled && !!productId,
   });

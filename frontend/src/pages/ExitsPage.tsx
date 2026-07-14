@@ -20,6 +20,7 @@ import {
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { BatchSelectField } from '@/components/movements/BatchSelectField';
+import { StockOriginSelect } from '@/components/movements/StockOriginSelect';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
 import { Pagination } from '@/components/ui/Pagination';
@@ -83,18 +84,25 @@ export function ExitsPage() {
     modalOpen
   );
 
-  const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
+  const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
     watchedProductId,
     watchedOriginId,
     modalOpen
   );
 
   useEffect(() => {
-    if (!watchedOriginId) return;
-    if (!origins.some((o) => o.id === watchedOriginId)) {
+    if (!watchedProductId) {
+      setValue('originLocationId', '' as never);
+      return;
+    }
+    if (origins.length === 1) {
+      setValue('originLocationId', origins[0].id as never);
+      return;
+    }
+    if (watchedOriginId && !origins.some((o) => o.id === watchedOriginId)) {
       setValue('originLocationId', '' as never);
     }
-  }, [watchedOriginId, origins, setValue]);
+  }, [watchedProductId, watchedOriginId, origins, setValue]);
 
   useEffect(() => {
     setValue('batchId', undefined);
@@ -127,7 +135,7 @@ export function ExitsPage() {
   });
 
   const onSubmit = (data: ExitForm) => {
-    if (hasMultipleLots && !data.batchId) {
+    if (hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
     }
@@ -202,31 +210,23 @@ export function ExitsPage() {
               )}
             />
           </div>
-          <div>
-            <label className="form-label">Origem</label>
-            <select
-              className="input-field"
-              disabled={!watchedProductId || originsLoading}
-              {...register('originLocationId', {
-                onChange: () => setValue('batchId', undefined),
-              })}
-            >
-              <option value="">
-                {!watchedProductId
-                  ? 'Selecione o produto primeiro'
-                  : originsLoading
-                    ? 'Carregando estoque...'
-                    : origins.length === 0
-                      ? 'Sem estoque disponível'
-                      : 'Selecione...'}
-              </option>
-              {origins.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.quantity} un.)
-                </option>
-              ))}
-            </select>
-          </div>
+          <Controller
+            name="originLocationId"
+            control={control}
+            render={({ field }) => (
+              <StockOriginSelect
+                value={field.value}
+                onChange={(id) => {
+                  field.onChange(id);
+                  setValue('batchId', undefined);
+                }}
+                origins={origins}
+                productSelected={!!watchedProductId}
+                loading={originsLoading}
+                error={errors.originLocationId?.message}
+              />
+            )}
+          />
           <Controller
             name="batchId"
             control={control}
@@ -236,7 +236,7 @@ export function ExitsPage() {
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.batchId?.message}
-                loading={lotsLoading}
+                loading={lotsLoading && !!watchedOriginId}
               />
             )}
           />

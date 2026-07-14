@@ -24,13 +24,14 @@ export function useAvailableLots(
     queryFn: () =>
       api
         .get('/stock/items', {
-          params: { productId, locationId, limit: 100 },
+          params: { productId, locationId, limit: 500 },
         })
         .then((r) => r.data.data as StockItem[]),
     enabled: enabled && !!productId && !!locationId,
   });
 
   const lots = useMemo<AvailableLot[]>(() => {
+    if (!productId || !locationId) return [];
     return (query.data ?? [])
       .filter((item) => item.quantity > 0 && item.batch?.id)
       .map((item) => ({
@@ -45,10 +46,11 @@ export function useAvailableLots(
         const db = b.expirationDate ? new Date(b.expirationDate).getTime() : Number.POSITIVE_INFINITY;
         return da - db;
       });
-  }, [query.data]);
+  }, [query.data, productId, locationId]);
 
   return {
     lots,
+    hasLots: lots.length > 0,
     hasMultipleLots: lots.length > 1,
     isLoading: query.isLoading || query.isFetching,
   };

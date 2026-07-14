@@ -20,7 +20,7 @@ export function BatchSelectField({
   loading,
   required = true,
 }: BatchSelectFieldProps) {
-  if (lots.length <= 1) return null;
+  if (!loading && lots.length === 0) return null;
 
   return (
     <div className="sm:col-span-2">
@@ -30,9 +30,9 @@ export function BatchSelectField({
       <select
         className="input-field"
         value={value || ''}
-        disabled={disabled || loading}
+        disabled={disabled || loading || lots.length === 0}
         onChange={(e) => onChange(e.target.value)}
-        required={required}
+        required={required && lots.length > 0}
       >
         <option value="">
           {loading ? 'Carregando lotes...' : 'Selecione o lote...'}
@@ -48,9 +48,13 @@ export function BatchSelectField({
         ))}
       </select>
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-      <p className="mt-1 text-xs text-slate-500">
-        Este produto possui {lots.length} lotes neste local. Escolha qual lote movimentar.
-      </p>
+      {!loading && lots.length > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          {lots.length === 1
+            ? 'Confirme o lote a ser movimentado.'
+            : `Este produto possui ${lots.length} lotes neste local. Escolha qual lote movimentar.`}
+        </p>
+      )}
     </div>
   );
 }

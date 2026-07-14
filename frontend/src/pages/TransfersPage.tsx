@@ -18,6 +18,7 @@ import {
 } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { BatchSelectField } from '@/components/movements/BatchSelectField';
+import { StockOriginSelect } from '@/components/movements/StockOriginSelect';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { useLocations } from '@/hooks/queries/useLocations';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
@@ -87,18 +88,25 @@ export function TransfersPage() {
     modalOpen
   );
 
-  const { lots, hasMultipleLots, isLoading: lotsLoading } = useAvailableLots(
+  const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
     watchedProductId,
     watchedOriginId,
     modalOpen
   );
 
   useEffect(() => {
-    if (!watchedOriginId) return;
-    if (!originOptions.some((o) => o.id === watchedOriginId)) {
+    if (!watchedProductId) {
+      setValue('originLocationId', '' as never);
+      return;
+    }
+    if (originOptions.length === 1) {
+      setValue('originLocationId', originOptions[0].id as never);
+      return;
+    }
+    if (watchedOriginId && !originOptions.some((o) => o.id === watchedOriginId)) {
       setValue('originLocationId', '' as never);
     }
-  }, [watchedOriginId, originOptions, setValue]);
+  }, [watchedProductId, watchedOriginId, originOptions, setValue]);
 
   useEffect(() => {
     setValue('batchId', undefined);
@@ -137,7 +145,7 @@ export function TransfersPage() {
   });
 
   const onSubmit = (data: TransferForm) => {
-    if (hasMultipleLots && !data.batchId) {
+    if (hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
     }
@@ -202,33 +210,25 @@ export function TransfersPage() {
               )}
             />
           </div>
+          <Controller
+            name="originLocationId"
+            control={control}
+            render={({ field }) => (
+              <StockOriginSelect
+                value={field.value}
+                onChange={(id) => {
+                  field.onChange(id);
+                  setValue('batchId', undefined);
+                }}
+                origins={originOptions}
+                productSelected={!!watchedProductId}
+                loading={originsLoading}
+                error={errors.originLocationId?.message}
+              />
+            )}
+          />
           <div>
-            <label className="form-label">Origem</label>
-            <select
-              className="input-field"
-              disabled={!watchedProductId || originsLoading}
-              {...register('originLocationId', {
-                onChange: () => setValue('batchId', undefined),
-              })}
-            >
-              <option value="">
-                {!watchedProductId
-                  ? 'Selecione o produto primeiro'
-                  : originsLoading
-                    ? 'Carregando estoque...'
-                    : originOptions.length === 0
-                      ? 'Sem estoque disponível'
-                      : 'Selecione...'}
-              </option>
-              {originOptions.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.quantity} un.)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="form-label">Destino</label>
+            <label className="form-label">Destino *</label>
             <select className="input-field" {...register('destinationLocationId')}>
               <option value="">Selecione...</option>
               {locations
@@ -249,7 +249,7 @@ export function TransfersPage() {
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.batchId?.message}
-                loading={lotsLoading}
+                loading={lotsLoading && !!watchedOriginId}
               />
             )}
           />
