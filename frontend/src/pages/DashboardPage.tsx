@@ -39,6 +39,10 @@ import {
   useDashboardChart,
   useBatchesDashboard,
 } from '@/hooks/queries/useDashboard';
+import {
+  DashboardKpiModal,
+  type DashboardKpiType,
+} from '@/components/dashboard/DashboardKpiModal';
 
 const ExpirationAlertsModal = lazy(() =>
   import('@/components/alerts/ExpirationAlertsModal').then((m) => ({
@@ -105,6 +109,10 @@ export function DashboardPage() {
   const chart = useChartTheme();
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
   const [alertsModalOpen, setAlertsModalOpen] = useState(false);
+  const [kpiModal, setKpiModal] = useState<DashboardKpiType | null>(null);
+
+  const openKpi = (type: DashboardKpiType) => setKpiModal(type);
+  const closeKpi = () => setKpiModal(null);
 
   const { data, isPending, isError, error, refetch } = useDashboardMetrics();
   const { data: chartResponse, isLoading: chartLoading } = useDashboardChart(chartPeriod);
@@ -161,15 +169,34 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" />
 
       <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5 xl:gap-5">
-        <KpiCard title="Produtos Ativos" value={metrics.kpis.totalProducts} icon={Package} color="bg-blue-50 text-blue-600" />
-        <KpiCard title="Locais de Estoque" value={metrics.kpis.totalLocations} icon={MapPin} color="bg-emerald-50 text-emerald-600" />
-        <KpiCard title="Movimentações Hoje" value={metrics.kpis.todayMovements} icon={ArrowLeftRight} color="bg-violet-50 text-violet-600" />
+        <KpiCard
+          title="Produtos Ativos"
+          value={metrics.kpis.totalProducts}
+          icon={Package}
+          color="bg-blue-50 text-blue-600"
+          onClick={() => openKpi('active-products')}
+        />
+        <KpiCard
+          title="Locais de Estoque"
+          value={metrics.kpis.totalLocations}
+          icon={MapPin}
+          color="bg-emerald-50 text-emerald-600"
+          onClick={() => openKpi('locations')}
+        />
+        <KpiCard
+          title="Movimentações Hoje"
+          value={metrics.kpis.todayMovements}
+          icon={ArrowLeftRight}
+          color="bg-violet-50 text-violet-600"
+          onClick={() => openKpi('today-movements')}
+        />
         <KpiCard
           title="Abaixo do Mínimo"
           value={metrics.kpis.belowMinCount}
           icon={AlertTriangle}
           color="bg-red-50 text-red-600"
           subtitle="Requer reposição"
+          onClick={() => openKpi('below-min')}
         />
         <KpiCard
           title="Vencendo (30 dias)"
@@ -177,6 +204,7 @@ export function DashboardPage() {
           icon={TrendingUp}
           color="bg-orange-50 text-orange-600"
           subtitle="Atenção à validade"
+          onClick={() => openKpi('expiring-30')}
         />
       </div>
 
@@ -188,18 +216,21 @@ export function DashboardPage() {
               value={expMetrics.counts.expired}
               icon={Skull}
               color="bg-red-50 text-red-600"
+              onClick={() => openKpi('expired-batches')}
             />
             <KpiCard
               title="Críticos (30d)"
               value={expMetrics.counts.critical}
               icon={AlertTriangle}
               color="bg-orange-50 text-orange-600"
+              onClick={() => openKpi('critical-batches')}
             />
             <KpiCard
               title="Atenção (90d)"
               value={expMetrics.counts.warning}
               icon={CalendarClock}
               color="bg-amber-50 text-amber-600"
+              onClick={() => openKpi('warning-batches')}
             />
             <KpiCard
               title="Alertas Pendentes"
@@ -410,6 +441,12 @@ export function DashboardPage() {
           emptyTitle="Sem movimentações recentes"
         />
       </div>
+      <DashboardKpiModal
+        type={kpiModal}
+        open={!!kpiModal}
+        onClose={closeKpi}
+        belowMinData={metrics.belowMin}
+      />
       {alertsModalOpen && (
         <Suspense fallback={null}>
           <ExpirationAlertsModal open onClose={() => setAlertsModalOpen(false)} />
