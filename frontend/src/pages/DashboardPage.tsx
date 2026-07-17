@@ -71,7 +71,7 @@ function KpiCard({
   const className = cn(
     'card flex w-full items-start justify-between gap-3 text-left transition',
     onClick && 'cursor-pointer hover:border-primary-300 hover:shadow-card dark:hover:border-primary-700',
-    alertActive && 'ring-2 ring-violet-500/70 ring-offset-2 ring-offset-white dark:ring-offset-slate-800 animate-pulse'
+    alertActive && 'ring-2 ring-red-500/70 ring-offset-2 ring-offset-white dark:ring-offset-slate-800 animate-pulse'
   );
 
   const content = (
@@ -236,7 +236,7 @@ export function DashboardPage() {
               title="Alertas Pendentes"
               value={pendingAlertsCount}
               icon={Clock}
-              color="bg-violet-50 text-violet-600"
+              color="bg-red-50 text-red-600"
               onClick={() => setAlertsModalOpen(true)}
               alertActive={pendingAlertsCount > 0}
             />
