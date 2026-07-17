@@ -68,10 +68,20 @@ export function ReportsPage() {
   };
 
   const fetchPdfBlob = async (report: ReportDef) => {
-    const { data } = await api.get<Blob>(`${report.endpoint}${buildQuery(report)}`, {
+    const response = await api.get<Blob>(`${report.endpoint}${buildQuery(report)}`, {
       responseType: 'blob',
     });
-    return data;
+    const blob = response.data;
+    const contentType = String(response.headers['content-type'] || blob.type || '');
+
+    if (!contentType.includes('application/pdf')) {
+      const message = await blob.text().catch(() => '');
+      throw new Error(message || 'Resposta inválida ao gerar PDF');
+    }
+
+    return blob.type === 'application/pdf'
+      ? blob
+      : new Blob([blob], { type: 'application/pdf' });
   };
 
   const downloadReport = async (report: ReportDef) => {
@@ -93,7 +103,15 @@ export function ReportsPage() {
     try {
       const blob = await fetchPdfBlob(report);
       const blobUrl = window.URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        // Fallback se o navegador bloquear pop-up
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.click();
+      }
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
       toast.success('PDF aberto em nova aba');
     } catch {
