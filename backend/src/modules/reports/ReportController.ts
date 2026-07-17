@@ -16,6 +16,11 @@ export class ReportController {
     );
     res.json({ success: true, data });
   }
+
+  static async stock(req: Request, res: Response): Promise<void> {
+    await ReportService.stockPdf(res, req.user?.name);
+  }
+
   static async movements(req: Request, res: Response): Promise<void> {
     await ReportService.movementsPdf(res, req.query as Record<string, string>, req.user?.name);
   }

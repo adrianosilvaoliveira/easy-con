@@ -18,6 +18,73 @@ const ENTRY_TYPES: MovementType[] = [
 ];
 
 export class ReportService {
+  private static mapStockRows(
+    stockItems: Array<{
+      quantity: number;
+      product: {
+        name: string;
+        internalCode: string;
+        unit: string;
+        minQuantity: number;
+        category?: { name: string } | null;
+      };
+      location: { name: string };
+      batch?: { batchNumber: string; expirationDate: Date } | null;
+    }>
+  ) {
+    return stockItems.map((item) => ({
+      code: item.product.internalCode,
+      product: item.product.name,
+      category: item.product.category?.name || '-',
+      location: item.location.name,
+      lot: item.batch?.batchNumber || '-',
+      expiry: item.batch?.expirationDate.toLocaleDateString('pt-BR') || '-',
+      unit: item.product.unit,
+      min: item.product.minQuantity,
+      qty: item.quantity,
+    }));
+  }
+
+  static async stockPdf(res: Response, userName?: string) {
+    const stockItems = await prisma.stockItem.findMany({
+      where: {
+        quantity: { gt: 0 },
+        product: { active: true },
+      },
+      orderBy: [
+        { product: { name: 'asc' } },
+        { location: { name: 'asc' } },
+        { batch: { expirationDate: 'asc' } },
+      ],
+      take: 5000,
+      include: {
+        product: { include: { category: true } },
+        location: true,
+        batch: true,
+      },
+    });
+
+    const totalQuantity = stockItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    await PdfProvider.generate(res, {
+      title: 'Relatório de Estoque Completo',
+      subtitle: `${stockItems.length} item(ns) em estoque · Quantidade total: ${totalQuantity}`,
+      filename: 'estoque-completo',
+      userName,
+      columns: [
+        { header: 'Código', key: 'code' },
+        { header: 'Produto', key: 'product' },
+        { header: 'Categoria', key: 'category' },
+        { header: 'Local', key: 'location' },
+        { header: 'Lote', key: 'lot' },
+        { header: 'Validade', key: 'expiry' },
+        { header: 'Un.', key: 'unit' },
+        { header: 'Qtd', key: 'qty' },
+      ],
+      rows: this.mapStockRows(stockItems),
+    });
+  }
+
   static async movementsPdf(
     res: Response,
     filters: Record<string, string | undefined>,

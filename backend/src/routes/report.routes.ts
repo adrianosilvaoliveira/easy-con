@@ -8,6 +8,7 @@ reportRoutes.use(authenticate);
 
 reportRoutes.get('/:type/preview', authorize('reports:READ'), ReportController.preview);
 
+reportRoutes.get('/stock/pdf', authorize('reports:EXPORT'), ReportController.stock);
 reportRoutes.get('/movements/pdf', authorize('reports:EXPORT'), ReportController.movements);
 reportRoutes.get('/entries/pdf', authorize('reports:EXPORT'), ReportController.entries);
 reportRoutes.get('/exits/pdf', authorize('reports:EXPORT'), ReportController.exits);

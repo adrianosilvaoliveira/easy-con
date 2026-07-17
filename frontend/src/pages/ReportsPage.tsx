@@ -24,6 +24,7 @@ interface ReportDef {
 }
 
 const reports: ReportDef[] = [
+  { id: 'stock', label: 'Estoque Completo', endpoint: '/reports/stock/pdf', category: 'general' },
   { id: 'movements', label: 'Movimentações', endpoint: '/reports/movements/pdf', category: 'general' },
   { id: 'entries', label: 'Entradas', endpoint: '/reports/entries/pdf', category: 'general' },
   { id: 'exits', label: 'Saídas', endpoint: '/reports/exits/pdf', category: 'general' },

@@ -60,6 +60,7 @@ function mapBatchRows(
 }
 
 const REPORT_TYPES = [
+  'stock',
   'movements',
   'entries',
   'exits',
@@ -87,6 +88,8 @@ export class ReportPreviewService {
     filters: Record<string, string | undefined>
   ): Promise<ReportPreview> {
     switch (type) {
+      case 'stock':
+        return this.stock();
       case 'movements':
         return this.movements(filters);
       case 'entries':
@@ -116,6 +119,72 @@ export class ReportPreviewService {
       default:
         throw new Error('Tipo de relatório inválido');
     }
+  }
+
+  private static mapStockRows(
+    stockItems: Array<{
+      quantity: number;
+      product: {
+        name: string;
+        internalCode: string;
+        unit: string;
+        minQuantity: number;
+        category?: { name: string } | null;
+      };
+      location: { name: string };
+      batch?: { batchNumber: string; expirationDate: Date } | null;
+    }>
+  ) {
+    return stockItems.map((item) => ({
+      code: item.product.internalCode,
+      product: item.product.name,
+      category: item.product.category?.name || '-',
+      location: item.location.name,
+      lot: item.batch?.batchNumber || '-',
+      expiry: item.batch?.expirationDate.toLocaleDateString('pt-BR') || '-',
+      unit: item.product.unit,
+      min: item.product.minQuantity,
+      qty: item.quantity,
+    }));
+  }
+
+  static async stock() {
+    const stockItems = await prisma.stockItem.findMany({
+      where: {
+        quantity: { gt: 0 },
+        product: { active: true },
+      },
+      orderBy: [
+        { product: { name: 'asc' } },
+        { location: { name: 'asc' } },
+        { batch: { expirationDate: 'asc' } },
+      ],
+      take: 5000,
+      include: {
+        product: { include: { category: true } },
+        location: true,
+        batch: true,
+      },
+    });
+
+    const totalQuantity = stockItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    return preview(
+      'Relatório de Estoque Completo',
+      `${stockItems.length} item(ns) em estoque · Quantidade total: ${totalQuantity}`,
+      [
+        { header: 'Código', key: 'code' },
+        { header: 'Produto', key: 'product' },
+        { header: 'Categoria', key: 'category' },
+        { header: 'Local', key: 'location' },
+        { header: 'Lote', key: 'lot' },
+        { header: 'Validade', key: 'expiry' },
+        { header: 'Un.', key: 'unit' },
+        { header: 'Mínimo', key: 'min' },
+        { header: 'Qtd', key: 'qty' },
+      ],
+      this.mapStockRows(stockItems)
+    );
   }
 
   static async movements(filters: Record<string, string | undefined>) {
