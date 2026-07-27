@@ -23,11 +23,9 @@ function createPrismaClient() {
   return client;
 }
 
+/** Singleton também em produção (Vercel): reaproveita pool entre invocações warm. */
 export const prisma = globalForPrisma.prisma || createPrismaClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;
 
 /** Em serverless (Vercel), não encerra o processo — a conexão é lazy por requisição. */
 if (!process.env.VERCEL) {

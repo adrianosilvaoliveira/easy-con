@@ -75,7 +75,8 @@ export class AuthService {
       },
     });
 
-    await AuditService.log({
+    // Não bloqueia o login se o audit falhar (DB transitório no serverless).
+    AuditService.logSafe({
       userId: user.id,
       action: 'LOGIN',
       module: 'auth',
@@ -126,7 +127,7 @@ export class AuthService {
     });
 
     if (userId) {
-      await AuditService.log({
+      AuditService.logSafe({
         userId,
         action: 'LOGOUT',
         module: 'auth',

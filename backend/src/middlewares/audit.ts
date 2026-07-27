@@ -7,7 +7,7 @@ export function auditAction(action: string, module: string) {
 
     res.json = function (body: unknown) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        AuditService.log({
+        AuditService.logSafe({
           userId: req.user?.id,
           action,
           module,
@@ -15,7 +15,7 @@ export function auditAction(action: string, module: string) {
           details: { method: req.method, path: req.path, body: req.body },
           ipAddress: req.ip,
           userAgent: req.get('user-agent') || undefined,
-        }).catch(() => undefined);
+        });
       }
       return originalJson(body);
     };

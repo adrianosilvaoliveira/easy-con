@@ -34,7 +34,10 @@ export function LoginPage() {
       navigate('/');
     },
     onError: (err: unknown) => {
-      const ax = err as { code?: string; response?: { status?: number; data?: { message?: string } } };
+      const ax = err as {
+        code?: string;
+        response?: { status?: number; data?: { message?: string; code?: string } };
+      };
       if (ax.code === 'ECONNABORTED') {
         toast.error('Servidor demorou para responder. Tente de novo em instantes.');
         return;
@@ -43,6 +46,10 @@ export function LoginPage() {
       const msg = ax.response?.data?.message;
       if (status === 503) {
         toast.error(msg ?? 'Banco sem tabelas. Rode o seed no Postgres (ver README).');
+        return;
+      }
+      if (status === 500) {
+        toast.error('Falha temporária no servidor. Tente novamente em alguns segundos.');
         return;
       }
       if (status === 404 || status === 502) {

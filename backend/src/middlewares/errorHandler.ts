@@ -2,7 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../shared/errors/AppError';
 import { logger } from '../shared/logger';
-import { isPrismaConnectionError } from '../shared/utils/prismaErrors';
+import {
+  getPrismaErrorCode,
+  isPrismaConnectionError,
+  isPrismaSchemaError,
+  isTransientDbError,
+} from '../shared/utils/prismaErrors';
 
 export function errorHandler(
   err: Error,
@@ -23,7 +28,7 @@ export function errorHandler(
     return;
   }
 
-  const prismaCode = (err as { code?: string }).code;
+  const prismaCode = getPrismaErrorCode(err);
   if (prismaCode === 'P2002') {
     res.status(422).json({
       success: false,
@@ -32,15 +37,27 @@ export function errorHandler(
     });
     return;
   }
-  if (isPrismaConnectionError(err)) {
+  if (isPrismaSchemaError(err)) {
+    logger.error('Schema mismatch', { message: err.message, prismaCode, requestId: req.requestId });
+    res.status(503).json({
+      success: false,
+      code: 'DATABASE_SCHEMA_MISMATCH',
+      message: 'Banco desatualizado em relação ao sistema. Contate o administrador.',
+      requestId: req.requestId,
+    });
+    return;
+  }
+  if (isPrismaConnectionError(err) || isTransientDbError(err)) {
     const message =
       prismaCode === 'P2021'
         ? 'Banco de dados sem tabelas. Rode: cd backend && .\\scripts\\seed-vercel.ps1'
         : 'Banco de dados indisponível. Tente novamente em instantes.';
+    logger.warn('Database unavailable', { message: err.message, prismaCode, requestId: req.requestId });
     res.status(503).json({
       success: false,
       code: 'DATABASE_NOT_READY',
       message,
+      requestId: req.requestId,
     });
     return;
   }
@@ -54,7 +71,12 @@ export function errorHandler(
     return;
   }
 
-  logger.error('Unhandled error', { message: err.message, stack: err.stack, requestId: req.requestId });
+  logger.error('Unhandled error', {
+    message: err.message,
+    stack: err.stack,
+    prismaCode,
+    requestId: req.requestId,
+  });
   res.status(500).json({
     success: false,
     code: 'INTERNAL_ERROR',

@@ -1,6 +1,7 @@
 import { prisma } from '../database/prisma';
 import { Prisma } from '@prisma/client';
 import { parsePagination, buildPaginatedResult } from '../shared/utils/pagination';
+import { logger } from '../shared/logger';
 
 interface AuditLogInput {
   userId?: string;
@@ -26,6 +27,17 @@ export class AuditService {
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
       },
+    });
+  }
+
+  /** Registra auditoria sem derrubar a operação principal (ex.: login). */
+  static logSafe(input: AuditLogInput): void {
+    void this.log(input).catch((err: unknown) => {
+      logger.warn('Audit log failed', {
+        action: input.action,
+        module: input.module,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
   }
 
