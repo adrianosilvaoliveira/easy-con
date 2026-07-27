@@ -3,7 +3,27 @@ import { UnauthorizedError, ForbiddenError } from '../shared/errors/AppError';
 import { JwtProvider } from '../providers/JwtProvider';
 import { prisma } from '../database/prisma';
 import { resolvePermissionsFromUser } from '../shared/utils/permissionResolver';
-import { isPrismaConnectionError } from '../shared/utils/prismaErrors';
+import { isPrismaConnectionError, isTransientDbError } from '../shared/utils/prismaErrors';
+import { AUTH_ACCOUNT_TTL_MS, CACHE_KEYS, memoryCache } from '../shared/cache/memoryCache';
+
+interface AuthAccountSnapshot {
+  permissionsVersion: number;
+  active: true;
+}
+
+function applyJwtUser(
+  req: Request,
+  payload: ReturnType<typeof JwtProvider.verifyAccessToken>
+): void {
+  req.user = {
+    id: payload.sub,
+    email: payload.email,
+    name: payload.name,
+    roleId: payload.roleId,
+    roleName: payload.roleName,
+    permissions: payload.permissions,
+  };
+}
 
 export async function authenticate(
   req: Request,
@@ -18,6 +38,17 @@ export async function authenticate(
 
     const token = authHeader.split(' ')[1];
     const payload = JwtProvider.verifyAccessToken(token);
+    const cacheKey = CACHE_KEYS.authUser(payload.sub);
+    const canUseJwtClaims =
+      Array.isArray(payload.permissions) && Boolean(payload.roleName) && typeof payload.pv === 'number';
+
+    /** Cache hit com mesma versão de permissões: zero query ao banco. */
+    const cached = memoryCache.get<AuthAccountSnapshot>(cacheKey);
+    if (cached && canUseJwtClaims && cached.permissionsVersion === payload.pv) {
+      applyJwtUser(req, payload);
+      next();
+      return;
+    }
 
     const account = await prisma.user.findUnique({
       where: { id: payload.sub, active: true },
@@ -25,23 +56,19 @@ export async function authenticate(
     });
 
     if (!account) {
+      memoryCache.invalidate(cacheKey);
       throw new UnauthorizedError('Usuário inválido ou inativo');
     }
 
+    memoryCache.set<AuthAccountSnapshot>(
+      cacheKey,
+      { permissionsVersion: account.permissionsVersion, active: true },
+      AUTH_ACCOUNT_TTL_MS
+    );
+
     /** Caminho rápido: token válido e permissões inalteradas — sem joins de permissões. */
-    if (
-      account.permissionsVersion === payload.pv &&
-      Array.isArray(payload.permissions) &&
-      payload.roleName
-    ) {
-      req.user = {
-        id: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        roleId: payload.roleId,
-        roleName: payload.roleName,
-        permissions: payload.permissions,
-      };
+    if (canUseJwtClaims && account.permissionsVersion === payload.pv) {
+      applyJwtUser(req, payload);
       next();
       return;
     }
@@ -60,6 +87,7 @@ export async function authenticate(
     });
 
     if (!user) {
+      memoryCache.invalidate(cacheKey);
       throw new UnauthorizedError('Usuário inválido ou inativo');
     }
 
@@ -78,7 +106,7 @@ export async function authenticate(
       next(error);
       return;
     }
-    if (isPrismaConnectionError(error)) {
+    if (isPrismaConnectionError(error) || isTransientDbError(error)) {
       next(error);
       return;
     }

@@ -54,7 +54,7 @@ export class DashboardService {
   }
 
   static getMetrics() {
-    return memoryCache.getOrSet(CACHE_KEYS.dashboardMetrics, 30_000, () =>
+    return memoryCache.getOrSet(CACHE_KEYS.dashboardMetrics, 60_000, () =>
       this.computeMetrics()
     );
   }
@@ -67,23 +67,28 @@ export class DashboardService {
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const [
-      totalProducts,
-      totalLocations,
-      todayMovements,
-      pendingTransfers,
-      belowMin,
-      expiringBatches,
-    ] = await Promise.all([
-      prisma.product.count({ where: { active: true } }),
-      prisma.stockLocation.count({ where: { active: true } }),
-      prisma.stockMovement.count({
-        where: { movementDate: { gte: today, lt: tomorrow } },
-      }),
-      prisma.stockMovement.count({
-        where: { status: 'PENDENTE' },
-      }),
+    type KpiRow = {
+      total_products: number;
+      total_locations: number;
+      today_movements: number;
+      pending_transfers: number;
+      monthly_entry_value: number;
+    };
+
+    const [kpiRows, belowMin, expiringBatches, recentMovements] = await Promise.all([
+      prisma.$queryRaw<KpiRow[]>`
+        SELECT
+          (SELECT COUNT(*)::int FROM products WHERE active = true) AS total_products,
+          (SELECT COUNT(*)::int FROM stock_locations WHERE active = true) AS total_locations,
+          (SELECT COUNT(*)::int FROM stock_movements
+            WHERE "movementDate" >= ${today} AND "movementDate" < ${tomorrow}) AS today_movements,
+          (SELECT COUNT(*)::int FROM stock_movements WHERE status = 'PENDENTE') AS pending_transfers,
+          (SELECT COALESCE(SUM("totalValue"), 0)::float FROM stock_movements
+            WHERE type IN ('ENTRADA_COMPRA', 'ENTRADA_MANUAL')
+              AND "movementDate" >= ${thirtyDaysAgo}) AS monthly_entry_value
+      `,
       prisma.$queryRaw<BelowMinRow[]>(Prisma.sql`
         SELECT p.id, p.name, p."internalCode" AS "internalCode", p."minQuantity" AS "minQuantity",
           c.name AS category,
@@ -99,7 +104,7 @@ export class DashboardService {
       prisma.productBatch.findMany({
         where: {
           expirationDate: {
-            lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            lte: in30Days,
             gte: new Date(),
           },
           quantity: { gt: 0 },
@@ -108,36 +113,29 @@ export class DashboardService {
         orderBy: { expirationDate: 'asc' },
         take: 10,
       }),
+      prisma.stockMovement.findMany({
+        take: 10,
+        orderBy: { movementDate: 'desc' },
+        include: {
+          product: { select: { name: true, internalCode: true } },
+          user: { select: { name: true } },
+          originLocation: { select: { name: true } },
+          destinationLocation: { select: { name: true } },
+        },
+      }),
     ]);
 
-    const totalStockValue = await prisma.stockMovement.aggregate({
-      where: {
-        type: { in: ['ENTRADA_COMPRA', 'ENTRADA_MANUAL'] },
-        movementDate: { gte: thirtyDaysAgo },
-      },
-      _sum: { totalValue: true },
-    });
-
-    const recentMovements = await prisma.stockMovement.findMany({
-      take: 10,
-      orderBy: { movementDate: 'desc' },
-      include: {
-        product: { select: { name: true, internalCode: true } },
-        user: { select: { name: true } },
-        originLocation: { select: { name: true } },
-        destinationLocation: { select: { name: true } },
-      },
-    });
+    const kpi = kpiRows[0];
 
     return {
       kpis: {
-        totalProducts,
-        totalLocations,
-        todayMovements,
-        pendingTransfers,
+        totalProducts: kpi?.total_products ?? 0,
+        totalLocations: kpi?.total_locations ?? 0,
+        todayMovements: kpi?.today_movements ?? 0,
+        pendingTransfers: kpi?.pending_transfers ?? 0,
         belowMinCount: belowMin.length,
         expiringCount: expiringBatches.length,
-        monthlyEntryValue: totalStockValue._sum.totalValue || 0,
+        monthlyEntryValue: kpi?.monthly_entry_value ?? 0,
       },
       belowMin,
       expiring: expiringBatches,

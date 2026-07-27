@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { ASSIGNABLE_ROLES, OPERACIONAL_PERMISSIONS, GERENCIA_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS } from '../../shared/constants/roles';
 import { MODULE_LABELS, ACTION_LABELS } from '../../shared/constants/permissionCatalog';
 import { resolvePermissionsFromUser } from '../../shared/utils/permissionResolver';
+import { CACHE_KEYS, memoryCache } from '../../shared/cache/memoryCache';
 
 type AuthActor = {
   id?: string;
@@ -255,6 +256,7 @@ export class UserService {
     updateData.permissionsVersion = { increment: 1 };
 
     await prisma.user.update({ where: { id }, data: updateData });
+    memoryCache.invalidate(CACHE_KEYS.authUser(id));
 
     const refreshed = await prisma.user.findUnique({ where: { id } });
     const useCustom =
@@ -282,6 +284,7 @@ export class UserService {
     }
     await this.findById(id);
     await prisma.user.update({ where: { id }, data: { active: false } });
+    memoryCache.invalidate(CACHE_KEYS.authUser(id));
     return { message: 'Usuário desativado' };
   }
 

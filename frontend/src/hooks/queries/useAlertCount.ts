@@ -6,7 +6,9 @@ export function useAlertCount() {
   return useQuery({
     queryKey: ['alerts-count'],
     queryFn: () => api.get('/batches/alerts/count').then((r) => r.data.data.count as number),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    // 5 min: reduz ops Prisma (auth + count) sem prejudicar o uso do sino.
+    refetchInterval: 5 * 60_000,
+    staleTime: 5 * 60_000,
+    refetchIntervalInBackground: false,
   });
 }

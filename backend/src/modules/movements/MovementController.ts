@@ -4,17 +4,17 @@ import { getParam } from '../../shared/utils/params';
 
 export class MovementController {
   static async createEntry(req: Request, res: Response): Promise<void> {
-    const result = await MovementService.createEntry(req.body, req.user!.id);
+    const result = await MovementService.createEntry(req.body, req.user!.id, req.user!.roleName);
     res.status(201).json({ success: true, data: result });
   }
 
   static async createExit(req: Request, res: Response): Promise<void> {
-    const result = await MovementService.createExit(req.body, req.user!.id);
+    const result = await MovementService.createExit(req.body, req.user!.id, req.user!.roleName);
     res.status(201).json({ success: true, data: result });
   }
 
   static async createTransfer(req: Request, res: Response): Promise<void> {
-    const result = await MovementService.createTransfer(req.body, req.user!.id);
+    const result = await MovementService.createTransfer(req.body, req.user!.id, req.user!.roleName);
     res.status(201).json({ success: true, data: result });
   }
 

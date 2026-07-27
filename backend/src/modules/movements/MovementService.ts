@@ -44,12 +44,8 @@ const movementInclude = {
   approvedBy: { select: { id: true, name: true } },
 } as const;
 export class MovementService {
-  private static async requiresApproval(userId: string): Promise<boolean> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: { select: { name: true } } },
-    });
-    return user?.role.name === ('OPERACIONAL' satisfies RoleName);
+  private static requiresApproval(roleName?: RoleName): boolean {
+    return roleName === ('OPERACIONAL' satisfies RoleName);
   }
   private static async updateStock(
     productId: string,
@@ -153,8 +149,8 @@ export class MovementService {
     }
     await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
   }
-  static async createEntry(data: EntryDTO, userId: string) {
-    if (await this.requiresApproval(userId)) {
+  static async createEntry(data: EntryDTO, userId: string, roleName?: RoleName) {
+    if (this.requiresApproval(roleName)) {
       return this.createPendingEntry(data, userId);
     }
     return this.executeEntry(data, userId);
@@ -274,9 +270,9 @@ export class MovementService {
       throw e;
     }
   }
-  static async createExit(data: ExitDTO, userId: string) {
+  static async createExit(data: ExitDTO, userId: string, roleName?: RoleName) {
     await this.assertExitStockAvailable(data);
-    if (await this.requiresApproval(userId)) {
+    if (this.requiresApproval(roleName)) {
       return this.createPendingExit(data, userId);
     }
     return this.executeExit(data, userId);
@@ -365,9 +361,9 @@ export class MovementService {
       return { ...movements[0], fefoAllocations: movements };
     });
   }
-  static async createTransfer(data: TransferDTO, userId: string) {
+  static async createTransfer(data: TransferDTO, userId: string, roleName?: RoleName) {
     await this.assertTransferStockAvailable(data);
-    if (await this.requiresApproval(userId)) {
+    if (this.requiresApproval(roleName)) {
       return prisma.stockMovement.create({
         data: {
           type: 'TRANSFERENCIA',

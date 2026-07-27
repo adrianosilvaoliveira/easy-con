@@ -14,6 +14,7 @@ import {
 } from '../../shared/utils/expiration';
 import { AuditService } from '../../services/AuditService';
 import { AlertService } from './AlertService';
+import { CACHE_KEYS, memoryCache } from '../../shared/cache/memoryCache';
 import { z } from 'zod';
 import { createBatchSchema, updateBatchSchema } from './batches.dto';
 
@@ -322,35 +323,56 @@ export class BatchService {
     if (batch.quantity <= 0) return;
 
     const types = getApplicableAlertTypes(batch.expirationDate);
-    for (const alertType of types) {
-      await prisma.expirationAlert.upsert({
-        where: { batchId_alertType: { batchId, alertType } },
-        update: { alertDate: new Date() },
-        create: { batchId, alertType },
-      });
-      await AuditService.log({
-        action: 'GENERATE_ALERT',
-        module: 'expiration',
-        entityId: batchId,
-        details: { alertType, batchNumber: batch.batchNumber },
-      });
-    }
+    if (types.length === 0) return;
+
+    // Uma operação em vez de N upserts + N audits (cron cobre atualização periódica).
+    await prisma.expirationAlert.createMany({
+      data: types.map((alertType) => ({ batchId, alertType })),
+      skipDuplicates: true,
+    });
+    memoryCache.invalidate(CACHE_KEYS.alertCount);
   }
 
   static async getDashboardMetrics() {
     const today = this.startOfToday();
+    const day = 24 * 60 * 60 * 1000;
+    const t31 = new Date(today.getTime() + 31 * day);
+    const t91 = new Date(today.getTime() + 91 * day);
+    const in6Months = new Date(today);
+    in6Months.setMonth(in6Months.getMonth() + 6);
 
-    const [alertsCount, batches, criticalBatchesRaw] = await Promise.all([
+    type CountRow = {
+      expired: number;
+      critical: number;
+      warning: number;
+      valid: number;
+      financial_loss: number;
+    };
+    type MonthRow = { month: string; count: number };
+
+    const [alertsCount, countRows, monthRows, criticalBatchesRaw] = await Promise.all([
       AlertService.countActive(),
+      prisma.$queryRaw<CountRow[]>`
+        SELECT
+          COUNT(*) FILTER (WHERE expiration_date < ${today})::int AS expired,
+          COUNT(*) FILTER (WHERE expiration_date >= ${today} AND expiration_date < ${t31})::int AS critical,
+          COUNT(*) FILTER (WHERE expiration_date >= ${t31} AND expiration_date < ${t91})::int AS warning,
+          COUNT(*) FILTER (WHERE expiration_date >= ${t91})::int AS valid,
+          COALESCE(SUM(CASE WHEN expiration_date < ${today}
+            THEN quantity * COALESCE(unit_cost, 0) ELSE 0 END), 0)::float AS financial_loss
+        FROM product_batches
+      `,
+      prisma.$queryRaw<MonthRow[]>`
+        SELECT to_char(date_trunc('month', expiration_date), 'YYYY-MM') AS month,
+          COALESCE(SUM(quantity), 0)::int AS count
+        FROM product_batches
+        WHERE expiration_date >= ${today}
+          AND expiration_date < ${in6Months}
+        GROUP BY 1
+        ORDER BY 1
+      `,
       prisma.productBatch.findMany({
-        select: {
-          expirationDate: true,
-          quantity: true,
-          unitCost: true,
-        },
-      }),
-      prisma.productBatch.findMany({
-        where: { expirationDate: { lte: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000) } },
+        where: { expirationDate: { lte: new Date(today.getTime() + 30 * day) } },
         take: 20,
         orderBy: { expirationDate: 'asc' },
         include: {
@@ -360,21 +382,13 @@ export class BatchService {
       }),
     ]);
 
-    const counts = { expired: 0, critical: 0, warning: 0, valid: 0 };
-    const statusKey: Record<ExpirationStatus, keyof typeof counts> = {
-      EXPIRED: 'expired',
-      CRITICAL: 'critical',
-      WARNING: 'warning',
-      VALID: 'valid',
+    const counts = {
+      expired: countRows[0]?.expired ?? 0,
+      critical: countRows[0]?.critical ?? 0,
+      warning: countRows[0]?.warning ?? 0,
+      valid: countRows[0]?.valid ?? 0,
+      alertsCount,
     };
-    for (const batch of batches) {
-      const status = calculateExpirationStatus(batch.expirationDate);
-      counts[statusKey[status]]++;
-    }
-
-    const financialLoss = batches
-      .filter((b) => calculateExpirationStatus(b.expirationDate) === 'EXPIRED')
-      .reduce((sum, b) => sum + b.quantity * Number(b.unitCost || 0), 0);
 
     const monthMap = new Map<string, number>();
     for (let i = 0; i < 6; i++) {
@@ -383,12 +397,9 @@ export class BatchService {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       monthMap.set(key, 0);
     }
-
-    batches.forEach((b) => {
-      if (calculateExpirationStatus(b.expirationDate) === 'EXPIRED') return;
-      const key = `${b.expirationDate.getFullYear()}-${String(b.expirationDate.getMonth() + 1).padStart(2, '0')}`;
-      if (monthMap.has(key)) monthMap.set(key, (monthMap.get(key) || 0) + b.quantity);
-    });
+    for (const row of monthRows) {
+      if (monthMap.has(row.month)) monthMap.set(row.month, row.count);
+    }
 
     const expiringByMonth = Array.from(monthMap.entries()).map(([month, count]) => ({
       month,
@@ -401,8 +412,8 @@ export class BatchService {
       .slice(0, 10);
 
     return {
-      counts: { ...counts, alertsCount },
-      financialLoss,
+      counts,
+      financialLoss: countRows[0]?.financial_loss ?? 0,
       expiringByMonth,
       criticalBatches,
     };

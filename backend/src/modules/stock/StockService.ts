@@ -163,8 +163,6 @@ export class StockService {
   }
 
   static async listStockItems(filters: Record<string, string | undefined>) {
-    await prisma.stockItem.deleteMany({ where: { quantity: 0 } });
-
     const pagination = parsePagination(filters.page, filters.limit);
     const where: Prisma.StockItemWhereInput = { quantity: { gt: 0 } };
 

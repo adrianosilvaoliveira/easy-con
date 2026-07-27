@@ -92,7 +92,7 @@ export class AlertService {
   }
 
   static async countActive() {
-    return memoryCache.getOrSet(CACHE_KEYS.alertCount, 30_000, () =>
+    return memoryCache.getOrSet(CACHE_KEYS.alertCount, 120_000, () =>
       prisma.expirationAlert.count({ where: this.activeWhere() })
     );
   }
