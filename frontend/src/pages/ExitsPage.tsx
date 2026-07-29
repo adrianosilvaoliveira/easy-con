@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,8 +12,9 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
-import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
-import type { StockMovement, PaginatedResponse } from '@/types';
+import { ProductSearchSelect, type ProductOption } from '@/components/products/ProductSearchSelect';
+import { KitBadge } from '@/components/products/ProductTypeSelect';
+import type { Product, StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import {
   MovementStatusBadge,
@@ -23,7 +24,9 @@ import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { StockOriginSelect } from '@/components/movements/StockOriginSelect';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
+import { useLocations } from '@/hooks/queries/useLocations';
 import { Pagination } from '@/components/ui/Pagination';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const PAGE_SIZE = 20;
 
@@ -47,6 +50,7 @@ type ExitForm = z.infer<typeof exitSchema>;
 export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
@@ -78,16 +82,38 @@ export function ExitsPage() {
 
   const watchedProductId = watch('productId');
   const watchedOriginId = watch('originLocationId');
+  const isKit = selectedProduct?.productType === 'KIT';
 
-  const { origins, isLoading: originsLoading } = useProductStockOrigins(
-    watchedProductId,
-    modalOpen
+  const { origins: productOrigins, isLoading: originsLoading } = useProductStockOrigins(
+    isKit ? undefined : watchedProductId,
+    modalOpen && !isKit
   );
 
+  const { data: allLocations, isLoading: locationsLoading } = useLocations();
+
+  const kitOrigins = useMemo(
+    () =>
+      (allLocations ?? []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        quantity: 0,
+      })),
+    [allLocations]
+  );
+
+  const origins = isKit ? kitOrigins : productOrigins;
+  const originsBusy = isKit ? locationsLoading : originsLoading;
+
+  const { data: kitDetail } = useQuery({
+    queryKey: ['product', watchedProductId, 'kit-exit'],
+    queryFn: () => api.get(`/products/${watchedProductId}`).then((r) => r.data.data as Product),
+    enabled: modalOpen && isKit && !!watchedProductId,
+  });
+
   const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
-    watchedProductId,
+    isKit ? undefined : watchedProductId,
     watchedOriginId,
-    modalOpen
+    modalOpen && !isKit
   );
 
   useEffect(() => {
@@ -110,36 +136,48 @@ export function ExitsPage() {
   }, [watchedProductId, watchedOriginId, setValue, clearErrors]);
 
   useEffect(() => {
-    if (lots.length === 1) {
+    if (!isKit && lots.length === 1) {
       setValue('batchId', lots[0].batchId);
     }
-  }, [lots, setValue]);
+  }, [lots, setValue, isKit]);
 
   const mutation = useMutation({
     mutationFn: (data: ExitForm) =>
       api.post('/movements/exits', {
         ...data,
-        batchId: data.batchId || undefined,
+        batchId: isKit ? undefined : data.batchId || undefined,
       }),
     onSuccess: (res) => {
       const pendingApproval = res.data.data?.pendingApproval;
-      toast.success(pendingApproval ? 'Saída enviada para aprovação' : 'Saída registrada');
+      toast.success(
+        pendingApproval
+          ? 'Saída enviada para aprovação'
+          : isKit
+            ? 'Saída de kit registrada — estoque dos componentes atualizado'
+            : 'Saída registrada'
+      );
       queryClient.invalidateQueries({ queryKey: ['exits'] });
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       setModalOpen(false);
+      setSelectedProduct(null);
       reset();
     },
-    onError: (err: { response?: { data?: { message?: string } } }) =>
-      toast.error(err.response?.data?.message || 'Erro ao registrar saída'),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao registrar saída')),
   });
 
   const onSubmit = (data: ExitForm) => {
-    if (hasLots && !data.batchId) {
+    if (!isKit && hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
     }
     mutation.mutate(data);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSelectedProduct(null);
+    reset();
   };
 
   return (
@@ -161,7 +199,16 @@ export function ExitsPage() {
         columns={[
           { key: 'date', header: 'Data', render: (m) => formatDateTime(m.movementDate) },
           { key: 'type', header: 'Tipo', render: (m) => <Badge variant="warning">{movementTypeLabel(m.type)}</Badge> },
-          { key: 'product', header: 'Produto', render: (m) => formatProductName(m.product.name) },
+          {
+            key: 'product',
+            header: 'Produto',
+            render: (m) => (
+              <span className="flex items-center gap-2">
+                {formatProductName(m.product.name)}
+                {(m.product as { productType?: string }).productType === 'KIT' && <KitBadge />}
+              </span>
+            ),
+          },
           { key: 'qty', header: 'Qtd', render: (m) => m.quantity },
           { key: 'origin', header: 'Origem', render: (m) => m.originLocation?.name || '-' },
           { key: 'status', header: 'Status', render: (m) => <MovementStatusBadge status={m.status} /> },
@@ -180,7 +227,7 @@ export function ExitsPage() {
         />
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nova Saída" size="lg">
+      <Modal open={modalOpen} onClose={closeModal} title="Nova Saída" size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="form-label">Tipo</label>
@@ -199,14 +246,14 @@ export function ExitsPage() {
               render={({ field }) => (
                 <ProductSearchSelect
                   value={field.value}
-                  onChange={(id) => {
+                  onChange={(id, product) => {
                     field.onChange(id);
+                    setSelectedProduct(product ?? null);
                     setValue('originLocationId', '' as never);
                     setValue('batchId', undefined);
                   }}
                   error={errors.productId?.message}
                   required
-                  excludeKits
                 />
               )}
             />
@@ -223,29 +270,65 @@ export function ExitsPage() {
                 }}
                 origins={origins}
                 productSelected={!!watchedProductId}
-                loading={originsLoading}
+                loading={originsBusy}
                 error={errors.originLocationId?.message}
+                label={isKit ? 'Local de baixa dos componentes' : 'Origem'}
               />
             )}
           />
-          <Controller
-            name="batchId"
-            control={control}
-            render={({ field }) => (
-              <BatchSelectField
-                lots={lots}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.batchId?.message}
-                loading={lotsLoading && !!watchedOriginId}
-              />
-            )}
+          {!isKit && (
+            <Controller
+              name="batchId"
+              control={control}
+              render={({ field }) => (
+                <BatchSelectField
+                  lots={lots}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.batchId?.message}
+                  loading={lotsLoading && !!watchedOriginId}
+                />
+              )}
+            />
+          )}
+          <Input
+            label={isKit ? 'Quantidade de kits' : 'Quantidade'}
+            type="number"
+            {...register('quantity')}
           />
-          <Input label="Quantidade" type="number" {...register('quantity')} />
           <Input label="Motivo" {...register('reason')} />
+
+          {isKit && (
+            <div className="sm:col-span-2 rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-3 text-sm dark:border-teal-800 dark:bg-teal-950/30">
+              <p className="mb-2 flex items-center gap-2 font-medium text-teal-900 dark:text-teal-100">
+                <KitBadge /> Baixa automática dos componentes
+              </p>
+              <p className="mb-2 text-xs text-teal-800 dark:text-teal-200">
+                Ao registrar, o estoque de cada produto do kit será descontado no local selecionado
+                (lote do kit quando houver; senão FEFO).
+              </p>
+              {kitDetail?.kitItems && kitDetail.kitItems.length > 0 ? (
+                <ul className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                  {kitDetail.kitItems.map((ki) => (
+                    <li key={ki.id}>
+                      {formatProductName(ki.componentProduct.name)} × {ki.quantity}
+                      {ki.batch?.batchNumber ? ` · lote ${ki.batch.batchNumber}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-500">Carregando composição...</p>
+              )}
+            </div>
+          )}
+
           <div className="sm:col-span-2 flex justify-end gap-2">
-            <Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button type="submit" loading={mutation.isPending}>Registrar</Button>
+            <Button variant="secondary" type="button" onClick={closeModal}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={mutation.isPending}>
+              Registrar
+            </Button>
           </div>
         </form>
       </Modal>

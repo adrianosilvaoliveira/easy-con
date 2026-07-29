@@ -5,6 +5,7 @@ import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagina
 import { z } from 'zod';
 import { entrySchema, exitSchema, transferSchema } from './movements.dto';
 import { BatchService } from '../batches/BatchService';
+import { calculateExpirationStatus } from '../../shared/utils/expiration';
 type EntryDTO = z.infer<typeof entrySchema>;
 type ExitDTO = z.infer<typeof exitSchema>;
 type TransferDTO = z.infer<typeof transferSchema>;
@@ -133,6 +134,183 @@ export class MovementService {
     }
     await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
   }
+
+  /** Plano de baixa dos componentes de um kit no local informado. */
+  private static async planKitComponentExit(
+    kitProductId: string,
+    originLocationId: string,
+    kitQuantity: number,
+    exitType: ExitDTO['type']
+  ) {
+    const kitItems = await prisma.productKitItem.findMany({
+      where: { kitProductId },
+      include: {
+        componentProduct: { select: { id: true, name: true, active: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (kitItems.length < 2) {
+      throw new ValidationError('Kit sem composição válida (mínimo 2 produtos)');
+    }
+
+    type Slice = {
+      componentProductId: string;
+      componentName: string;
+      batchId: string | null;
+      quantity: number;
+    };
+    const plan: Slice[] = [];
+
+    for (const item of kitItems) {
+      if (!item.componentProduct.active) {
+        throw new ValidationError(`Componente inativo no kit: ${item.componentProduct.name}`);
+      }
+      const need = item.quantity * kitQuantity;
+      const name = item.componentProduct.name;
+
+      if (item.batchId) {
+        const stock = await prisma.stockItem.findFirst({
+          where: {
+            productId: item.componentProductId,
+            locationId: originLocationId,
+            batchId: item.batchId,
+          },
+          include: { batch: true },
+        });
+        if (stock && stock.quantity >= need) {
+          if (
+            exitType !== 'SAIDA_VENCIMENTO' &&
+            stock.batch &&
+            calculateExpirationStatus(stock.batch.expirationDate) === 'EXPIRED'
+          ) {
+            throw new ValidationError(
+              `Lote vencido do componente "${name}" — use baixa por vencimento`
+            );
+          }
+          plan.push({
+            componentProductId: item.componentProductId,
+            componentName: name,
+            batchId: item.batchId,
+            quantity: need,
+          });
+          continue;
+        }
+      }
+
+      try {
+        const fefo = await BatchService.getFefoBatches(
+          item.componentProductId,
+          originLocationId,
+          need
+        );
+        for (const slice of fefo) {
+          plan.push({
+            componentProductId: item.componentProductId,
+            componentName: name,
+            batchId: slice.batchId,
+            quantity: slice.quantity,
+          });
+        }
+        continue;
+      } catch {
+        // tenta saldo sem lote
+      }
+
+      const noBatch = await prisma.stockItem.findFirst({
+        where: {
+          productId: item.componentProductId,
+          locationId: originLocationId,
+          batchId: null,
+        },
+      });
+      if (!noBatch || noBatch.quantity < need) {
+        throw new ValidationError(
+          `Estoque insuficiente para o componente "${name}" (necessário ${need} un. no local selecionado)`
+        );
+      }
+      plan.push({
+        componentProductId: item.componentProductId,
+        componentName: name,
+        batchId: null,
+        quantity: need,
+      });
+    }
+
+    return plan;
+  }
+
+  private static async executeKitExit(
+    data: ExitDTO,
+    userId: string,
+    plan: Awaited<ReturnType<typeof MovementService.planKitComponentExit>>
+  ) {
+    const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
+    const kitLabel = data.reason?.trim() || 'Saída de kit';
+
+    return prisma.$transaction(async (tx) => {
+      const header = await tx.stockMovement.create({
+        data: {
+          type: data.type,
+          status: 'CONCLUIDA',
+          productId: data.productId,
+          quantity: data.quantity,
+          originLocationId: data.originLocationId,
+          reason: data.reason,
+          notes: data.notes,
+          movementDate,
+          userId,
+          metadata: {
+            kind: 'KIT_EXIT',
+            componentCount: plan.length,
+          },
+        },
+        include: movementInclude,
+      });
+
+      const componentMovements = [];
+      for (const slice of plan) {
+        const mov = await tx.stockMovement.create({
+          data: {
+            type: data.type,
+            status: 'CONCLUIDA',
+            productId: slice.componentProductId,
+            batchId: slice.batchId,
+            quantity: slice.quantity,
+            originLocationId: data.originLocationId,
+            reason: `${kitLabel} — componente de kit`,
+            notes: data.notes
+              ? `${data.notes} | kitMovementId=${header.id}`
+              : `kitMovementId=${header.id}`,
+            movementDate,
+            userId,
+            metadata: {
+              kind: 'KIT_EXIT_COMPONENT',
+              kitProductId: data.productId,
+              kitMovementId: header.id,
+            },
+          },
+          include: movementInclude,
+        });
+        await this.updateStockInTx(
+          tx,
+          slice.componentProductId,
+          data.originLocationId,
+          slice.batchId,
+          -slice.quantity
+        );
+        if (slice.batchId) {
+          await BatchService.syncBatchQuantity(slice.batchId, tx);
+        }
+        componentMovements.push(mov);
+      }
+
+      return {
+        ...header,
+        kitComponents: componentMovements,
+      };
+    });
+  }
+
   private static async assertTransferStockAvailable(data: TransferDTO) {
     if (data.batchId) {
       const item = await prisma.stockItem.findFirst({
@@ -271,6 +449,42 @@ export class MovementService {
     }
   }
   static async createExit(data: ExitDTO, userId: string, roleName?: RoleName) {
+    const product = await prisma.product.findUnique({ where: { id: data.productId } });
+    if (!product) throw new NotFoundError('Produto não encontrado');
+
+    if (product.productType === 'KIT') {
+      if (data.batchId) {
+        throw new ValidationError(
+          'Saída de kit não utiliza lote do kit — a baixa é nos componentes'
+        );
+      }
+      const plan = await this.planKitComponentExit(
+        data.productId,
+        data.originLocationId,
+        data.quantity,
+        data.type
+      );
+      if (this.requiresApproval(roleName)) {
+        const movement = await prisma.stockMovement.create({
+          data: {
+            type: data.type,
+            status: 'PENDENTE',
+            productId: data.productId,
+            quantity: data.quantity,
+            originLocationId: data.originLocationId,
+            reason: data.reason,
+            notes: data.notes,
+            movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+            userId,
+            metadata: { kind: 'KIT_EXIT' },
+          },
+          include: movementInclude,
+        });
+        return { ...movement, pendingApproval: true };
+      }
+      return this.executeKitExit(data, userId, plan);
+    }
+
     await this.assertExitStockAvailable(data);
     if (this.requiresApproval(roleName)) {
       return this.createPendingExit(data, userId);
@@ -585,6 +799,78 @@ export class MovementService {
     if (!movement.originLocationId) {
       throw new ValidationError('Origem da saída não informada');
     }
+
+    const product = await prisma.product.findUnique({ where: { id: movement.productId } });
+    const meta = movement.metadata as { kind?: string } | null;
+    const isKitExit = product?.productType === 'KIT' || meta?.kind === 'KIT_EXIT';
+
+    if (isKitExit) {
+      const exitData: ExitDTO = {
+        type: movement.type as ExitDTO['type'],
+        productId: movement.productId,
+        originLocationId: movement.originLocationId,
+        quantity: movement.quantity,
+        reason: movement.reason ?? undefined,
+        notes: notes || movement.notes || undefined,
+      };
+      const plan = await this.planKitComponentExit(
+        movement.productId,
+        movement.originLocationId,
+        movement.quantity,
+        exitData.type
+      );
+      return prisma.$transaction(async (tx) => {
+        const header = await tx.stockMovement.update({
+          where: { id: movement.id },
+          data: {
+            status: 'CONCLUIDA',
+            approvedById: approverId,
+            approvedAt: new Date(),
+            notes: notes || movement.notes,
+            metadata: {
+              kind: 'KIT_EXIT',
+              componentCount: plan.length,
+            },
+          },
+          include: movementInclude,
+        });
+        for (const slice of plan) {
+          await tx.stockMovement.create({
+            data: {
+              type: movement.type,
+              status: 'CONCLUIDA',
+              productId: slice.componentProductId,
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              originLocationId: movement.originLocationId!,
+              reason: `${movement.reason || 'Saída de kit'} — componente de kit`,
+              notes: `kitMovementId=${header.id}`,
+              movementDate: movement.movementDate,
+              userId: movement.userId,
+              approvedById: approverId,
+              approvedAt: new Date(),
+              metadata: {
+                kind: 'KIT_EXIT_COMPONENT',
+                kitProductId: movement.productId,
+                kitMovementId: header.id,
+              },
+            },
+          });
+          await this.updateStockInTx(
+            tx,
+            slice.componentProductId,
+            movement.originLocationId!,
+            slice.batchId,
+            -slice.quantity
+          );
+          if (slice.batchId) {
+            await BatchService.syncBatchQuantity(slice.batchId, tx);
+          }
+        }
+        return header;
+      });
+    }
+
     const exitData: ExitDTO = {
       type: movement.type as ExitDTO['type'],
       productId: movement.productId,

@@ -42,12 +42,12 @@ export function StockOriginSelect({
         </option>
         {origins.map((l) => (
           <option key={l.id} value={l.id}>
-            {l.name} ({l.quantity} un.)
+            {l.quantity > 0 ? `${l.name} (${l.quantity} un.)` : l.name}
           </option>
         ))}
       </select>
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-      {productSelected && !loading && origins.length > 1 && (
+      {productSelected && !loading && origins.length > 1 && origins.some((o) => o.quantity > 0) && (
         <p className="mt-1 text-xs text-slate-500">
           Produto disponível em {origins.length} locais. Escolha de onde movimentar.
         </p>
