@@ -140,33 +140,73 @@ export class MovementService {
     kitProductId: string,
     originLocationId: string,
     kitQuantity: number,
-    exitType: ExitDTO['type']
+    exitType: ExitDTO['type'],
+    overrides?: NonNullable<ExitDTO['kitComponents']>
   ) {
-    const kitItems = await prisma.productKitItem.findMany({
-      where: { kitProductId },
-      include: {
-        componentProduct: { select: { id: true, name: true, active: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (kitItems.length < 2) {
-      throw new ValidationError('Kit sem composição válida (mínimo 2 produtos)');
-    }
-
     type Slice = {
       componentProductId: string;
       componentName: string;
       batchId: string | null;
       quantity: number;
     };
+
+    type Line = {
+      componentProductId: string;
+      quantity: number;
+      batchId?: string | null;
+      name: string;
+    };
+
+    let lines: Line[];
+
+    if (overrides?.length) {
+      lines = [];
+      for (const row of overrides) {
+        const component = await prisma.product.findUnique({
+          where: { id: row.componentProductId },
+          select: { id: true, name: true, active: true, productType: true },
+        });
+        if (!component || !component.active) {
+          throw new ValidationError('Produto componente inválido ou inativo');
+        }
+        if (component.productType === 'KIT') {
+          throw new ValidationError(`"${component.name}" é um kit e não pode ser componente da saída`);
+        }
+        lines.push({
+          componentProductId: component.id,
+          quantity: row.quantity,
+          batchId: row.batchId,
+          name: component.name,
+        });
+      }
+    } else {
+      const kitItems = await prisma.productKitItem.findMany({
+        where: { kitProductId },
+        include: {
+          componentProduct: { select: { id: true, name: true, active: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (kitItems.length < 2) {
+        throw new ValidationError('Kit sem composição válida (mínimo 2 produtos)');
+      }
+      lines = kitItems.map((item) => ({
+        componentProductId: item.componentProductId,
+        quantity: item.quantity * kitQuantity,
+        batchId: item.batchId,
+        name: item.componentProduct.name,
+      }));
+    }
+
+    if (lines.length < 1) {
+      throw new ValidationError('Informe ao menos um produto para a saída do kit');
+    }
+
     const plan: Slice[] = [];
 
-    for (const item of kitItems) {
-      if (!item.componentProduct.active) {
-        throw new ValidationError(`Componente inativo no kit: ${item.componentProduct.name}`);
-      }
-      const need = item.quantity * kitQuantity;
-      const name = item.componentProduct.name;
+    for (const item of lines) {
+      const need = item.quantity;
+      const name = item.name;
 
       if (item.batchId) {
         const stock = await prisma.stockItem.findFirst({
@@ -177,24 +217,41 @@ export class MovementService {
           },
           include: { batch: true },
         });
-        if (stock && stock.quantity >= need) {
-          if (
-            exitType !== 'SAIDA_VENCIMENTO' &&
-            stock.batch &&
-            calculateExpirationStatus(stock.batch.expirationDate) === 'EXPIRED'
-          ) {
-            throw new ValidationError(
-              `Lote vencido do componente "${name}" — use baixa por vencimento`
-            );
-          }
-          plan.push({
-            componentProductId: item.componentProductId,
-            componentName: name,
-            batchId: item.batchId,
-            quantity: need,
-          });
-          continue;
+        if (!stock || stock.quantity < need) {
+          throw new ValidationError(
+            `Estoque insuficiente no lote selecionado de "${name}" (necessário ${need} un.)`
+          );
         }
+        if (
+          exitType !== 'SAIDA_VENCIMENTO' &&
+          stock.batch &&
+          calculateExpirationStatus(stock.batch.expirationDate) === 'EXPIRED'
+        ) {
+          throw new ValidationError(
+            `Lote vencido do componente "${name}" — use baixa por vencimento`
+          );
+        }
+        plan.push({
+          componentProductId: item.componentProductId,
+          componentName: name,
+          batchId: item.batchId,
+          quantity: need,
+        });
+        continue;
+      }
+
+      const lotCount = await prisma.stockItem.count({
+        where: {
+          productId: item.componentProductId,
+          locationId: originLocationId,
+          quantity: { gt: 0 },
+          batchId: { not: null },
+        },
+      });
+      if (lotCount > 1) {
+        throw new ValidationError(
+          `Selecione o lote de "${name}" — há mais de um lote disponível neste local`
+        );
       }
 
       try {
@@ -462,7 +519,8 @@ export class MovementService {
         data.productId,
         data.originLocationId,
         data.quantity,
-        data.type
+        data.type,
+        data.kitComponents
       );
       if (this.requiresApproval(roleName)) {
         const movement = await prisma.stockMovement.create({
@@ -476,7 +534,10 @@ export class MovementService {
             notes: data.notes,
             movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
             userId,
-            metadata: { kind: 'KIT_EXIT' },
+            metadata: {
+              kind: 'KIT_EXIT',
+              kitComponents: data.kitComponents ?? null,
+            },
           },
           include: movementInclude,
         });
@@ -801,7 +862,10 @@ export class MovementService {
     }
 
     const product = await prisma.product.findUnique({ where: { id: movement.productId } });
-    const meta = movement.metadata as { kind?: string } | null;
+    const meta = movement.metadata as {
+      kind?: string;
+      kitComponents?: NonNullable<ExitDTO['kitComponents']>;
+    } | null;
     const isKitExit = product?.productType === 'KIT' || meta?.kind === 'KIT_EXIT';
 
     if (isKitExit) {
@@ -812,12 +876,14 @@ export class MovementService {
         quantity: movement.quantity,
         reason: movement.reason ?? undefined,
         notes: notes || movement.notes || undefined,
+        kitComponents: meta?.kitComponents,
       };
       const plan = await this.planKitComponentExit(
         movement.productId,
         movement.originLocationId,
         movement.quantity,
-        exitData.type
+        exitData.type,
+        exitData.kitComponents
       );
       return prisma.$transaction(async (tx) => {
         const header = await tx.stockMovement.update({

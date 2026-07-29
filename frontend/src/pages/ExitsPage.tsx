@@ -22,6 +22,11 @@ import {
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { StockOriginSelect } from '@/components/movements/StockOriginSelect';
+import {
+  KitExitEditor,
+  resetKitLinesFromDetail,
+  type KitExitLine,
+} from '@/components/movements/KitExitEditor';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
 import { useLocations } from '@/hooks/queries/useLocations';
@@ -51,6 +56,8 @@ export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
+  const [kitLines, setKitLines] = useState<KitExitLine[]>([]);
+  const [kitLinesError, setKitLinesError] = useState('');
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
@@ -82,7 +89,14 @@ export function ExitsPage() {
 
   const watchedProductId = watch('productId');
   const watchedOriginId = watch('originLocationId');
+  const watchedQuantity = watch('quantity');
   const isKit = selectedProduct?.productType === 'KIT';
+
+  // Ao trocar de kit/produto, reinicia linhas editáveis
+  useEffect(() => {
+    setKitLines([]);
+    setKitLinesError('');
+  }, [watchedProductId]);
 
   const { origins: productOrigins, isLoading: originsLoading } = useProductStockOrigins(
     isKit ? undefined : watchedProductId,
@@ -109,6 +123,12 @@ export function ExitsPage() {
     queryFn: () => api.get(`/products/${watchedProductId}`).then((r) => r.data.data as Product),
     enabled: modalOpen && isKit && !!watchedProductId,
   });
+
+  useEffect(() => {
+    if (isKit && kitDetail?.kitItems?.length && kitLines.length === 0) {
+      setKitLines(resetKitLinesFromDetail(kitDetail));
+    }
+  }, [isKit, kitDetail, kitLines.length]);
 
   const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
     isKit ? undefined : watchedProductId,
@@ -142,10 +162,10 @@ export function ExitsPage() {
   }, [lots, setValue, isKit]);
 
   const mutation = useMutation({
-    mutationFn: (data: ExitForm) =>
+    mutationFn: (payload: ExitForm & { kitComponents?: Array<{ componentProductId: string; quantity: number; batchId?: string }> }) =>
       api.post('/movements/exits', {
-        ...data,
-        batchId: isKit ? undefined : data.batchId || undefined,
+        ...payload,
+        batchId: isKit ? undefined : payload.batchId || undefined,
       }),
     onSuccess: (res) => {
       const pendingApproval = res.data.data?.pendingApproval;
@@ -161,6 +181,7 @@ export function ExitsPage() {
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       setModalOpen(false);
       setSelectedProduct(null);
+      setKitLines([]);
       reset();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao registrar saída')),
@@ -171,12 +192,43 @@ export function ExitsPage() {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
     }
+    if (isKit) {
+      if (kitLines.length < 1) {
+        setKitLinesError('Inclua ao menos um produto na saída do kit');
+        return;
+      }
+      const kitQty = Math.max(1, Number(data.quantity) || 1);
+      for (const line of kitLines) {
+        if (!line.componentProductId) {
+          setKitLinesError('Há produtos inválidos na lista');
+          return;
+        }
+        if (line.hasLots && !line.batchId) {
+          setKitLinesError(
+            `Selecione o lote de "${formatProductName(line.name)}"`
+          );
+          return;
+        }
+      }
+      setKitLinesError('');
+      mutation.mutate({
+        ...data,
+        kitComponents: kitLines.map((l) => ({
+          componentProductId: l.componentProductId,
+          quantity: l.quantityPerKit * kitQty,
+          batchId: l.batchId || undefined,
+        })),
+      });
+      return;
+    }
     mutation.mutate(data);
   };
 
   const closeModal = () => {
     setModalOpen(false);
     setSelectedProduct(null);
+    setKitLines([]);
+    setKitLinesError('');
     reset();
   };
 
@@ -227,7 +279,7 @@ export function ExitsPage() {
         />
       )}
 
-      <Modal open={modalOpen} onClose={closeModal} title="Nova Saída" size="lg">
+      <Modal open={modalOpen} onClose={closeModal} title="Nova Saída" size="xl">
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="form-label">Tipo</label>
@@ -267,6 +319,9 @@ export function ExitsPage() {
                 onChange={(id) => {
                   field.onChange(id);
                   setValue('batchId', undefined);
+                  setKitLines((prev) =>
+                    prev.map((l) => ({ ...l, batchId: '', hasLots: undefined }))
+                  );
                 }}
                 origins={origins}
                 productSelected={!!watchedProductId}
@@ -299,27 +354,14 @@ export function ExitsPage() {
           <Input label="Motivo" {...register('reason')} />
 
           {isKit && (
-            <div className="sm:col-span-2 rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-3 text-sm dark:border-teal-800 dark:bg-teal-950/30">
-              <p className="mb-2 flex items-center gap-2 font-medium text-teal-900 dark:text-teal-100">
-                <KitBadge /> Baixa automática dos componentes
-              </p>
-              <p className="mb-2 text-xs text-teal-800 dark:text-teal-200">
-                Ao registrar, o estoque de cada produto do kit será descontado no local selecionado
-                (lote do kit quando houver; senão FEFO).
-              </p>
-              {kitDetail?.kitItems && kitDetail.kitItems.length > 0 ? (
-                <ul className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
-                  {kitDetail.kitItems.map((ki) => (
-                    <li key={ki.id}>
-                      {formatProductName(ki.componentProduct.name)} × {ki.quantity}
-                      {ki.batch?.batchNumber ? ` · lote ${ki.batch.batchNumber}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-slate-500">Carregando composição...</p>
-              )}
-            </div>
+            <KitExitEditor
+              kitDetail={kitDetail}
+              locationId={watchedOriginId}
+              kitQuantity={Number(watchedQuantity) || 1}
+              lines={kitLines}
+              onChange={setKitLines}
+              error={kitLinesError}
+            />
           )}
 
           <div className="sm:col-span-2 flex justify-end gap-2">

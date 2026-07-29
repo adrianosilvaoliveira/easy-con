@@ -74,6 +74,18 @@ export const exitSchema = baseMovement.extend({
     'SAIDA_VENCIMENTO',
   ]),
   originLocationId: z.string().uuid(),
+  /** Composição editada na saída do kit (quantidade total a baixar por componente). */
+  kitComponents: z
+    .array(
+      z.object({
+        componentProductId: z.string().uuid(),
+        quantity: z.coerce.number().int().positive(),
+        batchId: optionalUuid,
+      })
+    )
+    .min(1, 'Informe ao menos um produto na saída do kit')
+    .max(50)
+    .optional(),
 });
 
 export const transferSchema = baseMovement.extend({
