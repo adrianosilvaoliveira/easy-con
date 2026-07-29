@@ -7,6 +7,8 @@ export type LabelItem = {
   barcode: string;
   internalCode?: string;
   isKit?: boolean;
+  /** Quantidade de cópias da etiqueta (padrão 1). */
+  quantity?: number;
 };
 
 function escapeHtml(text: string) {
@@ -78,13 +80,18 @@ export function printBarcodeLabels(items: LabelItem[]) {
     throw new Error('Nenhum item com código de barras para imprimir');
   }
 
+  const copies = valid.flatMap((item) => {
+    const qty = Math.min(500, Math.max(1, Math.floor(item.quantity ?? 1)));
+    return Array.from({ length: qty }, () => item);
+  });
+
   // Abrir no mesmo tick do clique (sem await / import dinâmico).
   const win = window.open('', '_blank', 'width=800,height=600');
   if (!win) {
     throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.');
   }
 
-  const labelsHtml = valid
+  const labelsHtml = copies
     .map((item) => {
       let barcodeSvg: string;
       try {
