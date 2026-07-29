@@ -62,13 +62,14 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     queryFn: () =>
       api
         .get('/products', {
-          params: { search: debounced.trim() || undefined, limit: 80 },
+          params: { search: debounced.trim(), limit: 80 },
         })
         .then((r) => r.data.data as Product[]),
-    enabled: open,
+    enabled: open && debounced.trim().length >= 2,
   });
 
   const withBarcode = products.filter((p) => p.barcode?.trim());
+  const hasSearch = debounced.trim().length >= 2;
 
   const totalLabels = useMemo(
     () => Array.from(selected.values()).reduce((sum, i) => sum + i.quantity, 0),
@@ -259,18 +260,21 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
           </div>
 
           <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-surface-border dark:border-slate-600">
-            {isFetching && (
-              <li className="px-3 py-4 text-center text-sm text-slate-500">Buscando...</li>
-            )}
-            {!isFetching && withBarcode.length === 0 && (
+            {!hasSearch && (
               <li className="px-3 py-4 text-center text-sm text-slate-500">
-                Nenhum item com código de barras encontrado
-                {!debounced.trim() && (
-                  <span className="mt-1 block text-xs">Digite para buscar produtos ou kits</span>
-                )}
+                Digite ao menos 2 caracteres para buscar
               </li>
             )}
-            {withBarcode.map((p) => {
+            {hasSearch && isFetching && (
+              <li className="px-3 py-4 text-center text-sm text-slate-500">Buscando...</li>
+            )}
+            {hasSearch && !isFetching && withBarcode.length === 0 && (
+              <li className="px-3 py-4 text-center text-sm text-slate-500">
+                Nenhum item com código de barras encontrado
+              </li>
+            )}
+            {hasSearch &&
+              withBarcode.map((p) => {
               const isKit = p.productType === 'KIT';
               const already = isInList(p);
               return (
