@@ -38,12 +38,34 @@ export interface PaginatedResponse<T> {
   meta: PaginatedMeta;
 }
 
+export type ProductType = 'PRODUCT' | 'KIT';
+
+export interface ProductKitItem {
+  id: string;
+  quantity: number;
+  componentProductId: string;
+  componentProduct: {
+    id: string;
+    name: string;
+    internalCode: string;
+    barcode?: string | null;
+  };
+  batchId?: string | null;
+  batch?: {
+    id: string;
+    batchNumber: string;
+    expirationDate?: string;
+  } | null;
+}
+
 export interface Product {
   id: string;
   name: string;
   internalCode: string;
   barcode?: string;
+  productType?: ProductType;
   category: { id: string; name: string };
+  categoryId?: string;
   manufacturer?: string;
   unit: string;
   minQuantity: number;
@@ -53,6 +75,7 @@ export interface Product {
   totalStock?: number;
   batches?: ProductBatch[];
   stockItems?: StockItem[];
+  kitItems?: ProductKitItem[];
 }
 
 export interface ProductBatch {

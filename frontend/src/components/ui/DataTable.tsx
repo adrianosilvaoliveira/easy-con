@@ -28,6 +28,7 @@ interface DataTableProps<T> {
   emptyTitle?: string;
   emptyDescription?: string;
   onRowClick?: (item: T) => void;
+  getRowClassName?: (item: T) => string | undefined;
   /** Ativa virtualização de linhas (renderiza só o visível) para listas grandes. */
   virtualized?: boolean;
   /** Altura máxima da área rolável quando virtualizado. */
@@ -44,6 +45,7 @@ export function DataTable<T extends { id: string }>({
   emptyTitle = 'Nenhum registro encontrado',
   emptyDescription,
   onRowClick,
+  getRowClassName,
   virtualized,
   maxHeight = 560,
   estimateRowHeight = 44,
@@ -87,7 +89,8 @@ export function DataTable<T extends { id: string }>({
       className={cn(
         'border-b border-surface-border transition',
         i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/30 dark:bg-slate-800/50',
-        onRowClick && 'cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/30'
+        onRowClick && 'cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/30',
+        getRowClassName?.(item)
       )}
     >
       {columns.map((col) => (

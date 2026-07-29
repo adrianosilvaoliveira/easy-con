@@ -41,6 +41,11 @@ productRoutes.delete(
   asyncHandler(ProductController.deleteCategory)
 );
 productRoutes.get('/', authorize('products:READ'), asyncHandler(ProductController.list));
+productRoutes.get(
+  '/:id/batches',
+  authorize('products:READ'),
+  asyncHandler(ProductController.listProductBatches)
+);
 productRoutes.get('/:id', authorize('products:READ'), asyncHandler(ProductController.findById));
 productRoutes.post(
   '/',

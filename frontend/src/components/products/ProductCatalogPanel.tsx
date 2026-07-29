@@ -7,6 +7,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { ProductFormModal } from '@/components/products/ProductFormModal';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
+import { KitBadge, kitRowClassName } from '@/components/products/ProductTypeSelect';
 import { useAuthStore } from '@/stores/authStore';
 import { formatProductName } from '@/utils/format';
 import type { Product, PaginatedResponse } from '@/types';
@@ -68,7 +69,7 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
           <IncludeInactiveFilter checked={includeInactive} onChange={setIncludeInactive} />
           {canCreate && (
             <Button onClick={openCreate} className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" /> Novo Produto
+              <Plus className="h-4 w-4" /> Novo cadastro
             </Button>
           )}
         </div>
@@ -79,15 +80,29 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
         data={data?.data || []}
         emptyIcon={Package}
         emptyTitle="Nenhum produto encontrado"
+        getRowClassName={(p) => kitRowClassName(p.productType === 'KIT')}
         columns={[
           {
             key: 'code',
             header: 'Código',
             render: (p) => <span className="font-mono text-xs">{p.internalCode}</span>,
           },
-          { key: 'name', header: 'Nome', render: (p) => formatProductName(p.name) },
+          {
+            key: 'name',
+            header: 'Nome',
+            render: (p) => (
+              <span className="flex items-center gap-2">
+                {formatProductName(p.name)}
+                {p.productType === 'KIT' && <KitBadge />}
+              </span>
+            ),
+          },
           { key: 'category', header: 'Categoria', render: (p) => p.category.name },
-          { key: 'stock', header: 'Estoque', render: (p) => p.totalStock ?? 0 },
+          {
+            key: 'stock',
+            header: 'Estoque',
+            render: (p) => (p.productType === 'KIT' ? '—' : p.totalStock ?? 0),
+          },
           {
             key: 'status',
             header: 'Status',
@@ -101,7 +116,9 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
             key: 'stockAlert',
             header: 'Alerta',
             render: (p) =>
-              (p.totalStock ?? 0) < p.minQuantity ? (
+              p.productType === 'KIT' ? (
+                <Badge variant="info">Kit</Badge>
+              ) : (p.totalStock ?? 0) < p.minQuantity ? (
                 <Badge variant="danger">Abaixo do mínimo</Badge>
               ) : (
                 <Badge variant="success">OK</Badge>

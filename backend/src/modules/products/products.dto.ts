@@ -13,20 +13,29 @@ const optionalInternalCodeSchema = z.preprocess(
   z.string().max(50).optional()
 );
 
+export const kitItemSchema = z.object({
+  componentProductId: z.string().uuid(),
+  quantity: z.number().int().min(1).default(1),
+  batchId: z.string().uuid().optional().nullable(),
+});
+
 export const createProductSchema = z.object({
   name: productNameSchema,
   internalCode: optionalInternalCodeSchema,
   barcode: z.string().optional(),
+  productType: z.enum(['PRODUCT', 'KIT']).default('PRODUCT'),
   categoryId: z.string().uuid(),
   manufacturer: z.string().optional(),
   unit: z.string().default('UN'),
   minQuantity: z.number().int().min(0).default(0),
   location: z.string().optional(),
   notes: z.string().optional(),
+  kitItems: z.array(kitItemSchema).optional(),
 });
 
 export const updateProductSchema = createProductSchema.partial().extend({
   active: z.boolean().optional(),
+  kitItems: z.array(kitItemSchema).optional(),
 });
 
 export const createBatchSchema = z.object({
@@ -45,4 +54,6 @@ export const listProductsSchema = z.object({
   active: z.string().optional(),
   belowMin: z.string().optional(),
   expiringDays: z.string().optional(),
+  productType: z.string().optional(),
+  excludeKits: z.string().optional(),
 });

@@ -245,6 +245,7 @@ export function EntriesPage() {
                     onChange={(id) => field.onChange(id)}
                     error={errors.productId?.message}
                     required
+                    excludeKits
                   />
                 )}
               />

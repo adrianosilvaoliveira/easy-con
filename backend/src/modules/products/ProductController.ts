@@ -68,4 +68,9 @@ export class ProductController {
     const result = await CategoryService.getDeleteCheck(getParam(req, 'id'));
     res.json({ success: true, data: result });
   }
+
+  static async listProductBatches(req: Request, res: Response): Promise<void> {
+    const result = await ProductService.listProductBatches(getParam(req, 'id'));
+    res.json({ success: true, data: result });
+  }
 }

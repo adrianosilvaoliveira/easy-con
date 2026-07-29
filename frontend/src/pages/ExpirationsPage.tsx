@@ -269,6 +269,7 @@ export function ExpirationsPage() {
                 <ProductSearchSelect
                   value={field.value}
                   onChange={(id) => field.onChange(id)}
+                  excludeKits
                 />
               )}
             />

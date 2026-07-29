@@ -71,6 +71,11 @@ enum ExpirationStatus {
   EXPIRED
 }
 
+enum ProductType {
+  PRODUCT
+  KIT
+}
+
 enum ExpirationAlertType {
   EXPIRED
   DAYS_90
@@ -211,6 +216,7 @@ model Product {
   name          String
   internalCode  String         @unique
   barcode       String?
+  productType   ProductType    @default(PRODUCT) @map("product_type")
   categoryId    String
   category      Category       @relation(fields: [categoryId], references: [id])
   manufacturer  String?
@@ -223,12 +229,34 @@ model Product {
   stockItems    StockItem[]
   movements     StockMovement[]
   inventoryItems InventoryItem[]
+  kitItems      ProductKitItem[] @relation("KitProduct")
+  componentOf   ProductKitItem[] @relation("KitComponent")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
   @@index([name])
   @@index([barcode])
+  @@index([productType])
   @@map("products")
+}
+
+model ProductKitItem {
+  id                  String        @id @default(uuid())
+  kitProductId        String        @map("kit_product_id")
+  kitProduct          Product       @relation("KitProduct", fields: [kitProductId], references: [id], onDelete: Cascade)
+  componentProductId  String        @map("component_product_id")
+  componentProduct    Product       @relation("KitComponent", fields: [componentProductId], references: [id], onDelete: Restrict)
+  quantity            Int           @default(1)
+  batchId             String?       @map("batch_id")
+  batch               ProductBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@unique([kitProductId, componentProductId, batchId])
+  @@index([kitProductId])
+  @@index([componentProductId])
+  @@index([batchId])
+  @@map("product_kit_items")
 }
 
 model ProductBatch {
@@ -250,6 +278,7 @@ model ProductBatch {
   expirationAlerts  ExpirationAlert[]
   stockItems        StockItem[]
   movements         StockMovement[]
+  kitItems          ProductKitItem[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 

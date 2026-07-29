@@ -206,6 +206,7 @@ export function ExitsPage() {
                   }}
                   error={errors.productId?.message}
                   required
+                  excludeKits
                 />
               )}
             />

@@ -6,6 +6,8 @@ import { formatProductName } from '@/utils/format';
 import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/services/api';
 import type { CreatedProduct } from './ProductFormModal';
+import { KitBadge, kitRowClassName } from './ProductTypeSelect';
+import type { ProductType } from '@/types';
 
 const ProductFormModal = lazy(() =>
   import('./ProductFormModal').then((m) => ({ default: m.ProductFormModal }))
@@ -16,6 +18,7 @@ export interface ProductOption {
   name: string;
   internalCode: string;
   barcode?: string | null;
+  productType?: ProductType;
 }
 
 interface ProductSearchSelectProps {
@@ -26,6 +29,8 @@ interface ProductSearchSelectProps {
   required?: boolean;
   disabled?: boolean;
   allowCreate?: boolean;
+  /** Oculta kits da busca (entradas/saídas/componentes de kit) */
+  excludeKits?: boolean;
 }
 
 function normalize(text: string) {
@@ -58,6 +63,7 @@ export function ProductSearchSelect({
   required,
   disabled,
   allowCreate = true,
+  excludeKits = false,
 }: ProductSearchSelectProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -67,10 +73,16 @@ export function ProductSearchSelect({
   const debouncedQuery = useDebounce(query, 300);
 
   const { data: products = [], isFetching } = useQuery({
-    queryKey: ['products-search', debouncedQuery],
+    queryKey: ['products-search', debouncedQuery, excludeKits],
     queryFn: () =>
       api
-        .get('/products', { params: { search: debouncedQuery.trim() || undefined, limit: 40 } })
+        .get('/products', {
+          params: {
+            search: debouncedQuery.trim() || undefined,
+            limit: 40,
+            excludeKits: excludeKits ? 'true' : undefined,
+          },
+        })
         .then((r) => r.data.data as ProductOption[]),
     enabled: open || !!debouncedQuery,
     staleTime: 60_000,
@@ -124,10 +136,15 @@ export function ProductSearchSelect({
   };
 
   const handleCreated = (product: CreatedProduct) => {
+    if (excludeKits && product.productType === 'KIT') {
+      setProductModalOpen(false);
+      return;
+    }
     const option: ProductOption = {
       id: product.id,
       name: product.name,
       internalCode: product.internalCode,
+      productType: product.productType,
     };
     handleSelect(option);
   };
@@ -149,6 +166,7 @@ export function ProductSearchSelect({
               placeholder="Digite nome, código ou barras..."
               className={cn(
                 'input-field w-full pl-9 pr-9',
+                selected?.productType === 'KIT' && 'border-teal-300 bg-teal-50/50 dark:border-teal-700 dark:bg-teal-950/30',
                 error && 'border-red-400 focus:ring-red-200'
               )}
               onFocus={() => setOpen(true)}
@@ -214,24 +232,31 @@ export function ProductSearchSelect({
                 )}
               </li>
             ) : (
-              ranked.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-primary-50 dark:hover:bg-slate-700',
-                      value === p.id && 'bg-primary-50 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
-                    )}
-                    onClick={() => handleSelect(p)}
-                  >
-                    <span className="font-medium text-slate-900 dark:text-slate-100">{formatProductName(p.name)}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {p.internalCode}
-                      {p.barcode ? ` · ${p.barcode}` : ''}
-                    </span>
-                  </button>
-                </li>
-              ))
+              ranked.map((p) => {
+                const isKit = p.productType === 'KIT';
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-primary-50 dark:hover:bg-slate-700',
+                        value === p.id && 'bg-primary-50 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200',
+                        kitRowClassName(isKit)
+                      )}
+                      onClick={() => handleSelect(p)}
+                    >
+                      <span className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
+                        {formatProductName(p.name)}
+                        {isKit && <KitBadge />}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {p.internalCode}
+                        {p.barcode ? ` · ${p.barcode}` : ''}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
             )}
           </ul>
         )}

@@ -108,7 +108,14 @@ export function InventoryCountPanel({ inventoryId, onBack, onCompleted }: Invent
     queryKey: ['products-inventory-search', searchTrim],
     queryFn: () =>
       api
-        .get('/products', { params: { search: searchTrim, limit: 50, active: true } })
+        .get('/products', {
+          params: {
+            search: searchTrim,
+            limit: 50,
+            active: true,
+            excludeKits: 'true',
+          },
+        })
         .then((r) => r.data.data as CatalogProduct[]),
     enabled: searchTrim.length >= 2 && inventory?.status === 'EM_ANDAMENTO',
   });
