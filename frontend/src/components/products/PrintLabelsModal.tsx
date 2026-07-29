@@ -96,7 +96,7 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     });
   };
 
-  const handlePrint = async () => {
+  const handlePrint = () => {
     const items = Array.from(selected.values());
     if (!items.length) {
       toast.error('Selecione ao menos um item com código de barras');
@@ -104,7 +104,7 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     }
     setPrinting(true);
     try {
-      await printBarcodeLabels(items);
+      printBarcodeLabels(items);
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao imprimir etiquetas');

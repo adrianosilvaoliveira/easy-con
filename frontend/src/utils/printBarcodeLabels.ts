@@ -1,5 +1,8 @@
+import JsBarcode from 'jsbarcode';
+
 /**
  * Imprime etiquetas com código de barras (Code128 / EAN) via janela de impressão do navegador.
+ * window.open deve ser síncrono no clique — sem await antes, e sem noopener (senão retorna null).
  */
 export type LabelItem = {
   name: string;
@@ -16,15 +19,15 @@ function escapeHtml(text: string) {
     .replace(/"/g, '&quot;');
 }
 
-export async function printBarcodeLabels(items: LabelItem[]) {
+export function printBarcodeLabels(items: LabelItem[]) {
   const valid = items.filter((i) => i.barcode?.trim());
   if (!valid.length) {
     throw new Error('Nenhum item com código de barras para imprimir');
   }
 
-  const JsBarcode = (await import('jsbarcode')).default;
-
-  const win = window.open('', '_blank', 'noopener,noreferrer,width=800,height=600');
+  // Abrir no mesmo tick do clique do usuário (sem await antes).
+  // Não usar noopener/noreferrer: com eles window.open retorna null.
+  const win = window.open('', '_blank', 'width=800,height=600');
   if (!win) {
     throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.');
   }
@@ -42,6 +45,7 @@ export async function printBarcodeLabels(items: LabelItem[]) {
     })
     .join('');
 
+  win.document.open();
   win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -112,8 +116,6 @@ export async function printBarcodeLabels(items: LabelItem[]) {
 </html>`);
   win.document.close();
 
-  await new Promise((r) => setTimeout(r, 50));
-
   valid.forEach((item, index) => {
     const el = win.document.getElementById(`barcode-${index}`);
     if (!el) return;
@@ -137,5 +139,12 @@ export async function printBarcodeLabels(items: LabelItem[]) {
   });
 
   win.focus();
-  win.print();
+  // Pequeno atraso para o SVG renderizar antes do diálogo de impressão
+  setTimeout(() => {
+    try {
+      win.print();
+    } catch {
+      // janela pode ter sido fechada pelo usuário
+    }
+  }, 100);
 }
