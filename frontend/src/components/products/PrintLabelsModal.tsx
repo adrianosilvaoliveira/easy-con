@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, Search, X } from 'lucide-react';
+import { Plus, Printer, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { Modal } from '@/components/ui/Modal';
@@ -21,9 +21,9 @@ interface PrintLabelsModalProps {
   preselected?: LabelItem[];
 }
 
-function selectionKey(item: Pick<LabelItem, 'barcode' | 'internalCode' | 'name'>, fallbackId?: string) {
-  if (fallbackId) return fallbackId;
-  return `${item.internalCode || item.name}|${item.barcode}`;
+function itemKey(item: Pick<LabelItem, 'barcode' | 'internalCode'>, id?: string) {
+  if (id) return id;
+  return `${item.internalCode ?? ''}|${item.barcode}`;
 }
 
 export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabelsModalProps) {
@@ -31,28 +31,38 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
   const [selected, setSelected] = useState<Map<string, SelectedLabel>>(new Map());
   const [printing, setPrinting] = useState(false);
   const debounced = useDebounce(search, 300);
+  const wasOpen = useRef(false);
+  const preselectedRef = useRef(preselected);
+  preselectedRef.current = preselected;
 
+  // Só monta a lista ao abrir o modal — não reseta ao buscar ou ao re-render do pai
   useEffect(() => {
-    if (!open) return;
-    const map = new Map<string, SelectedLabel>();
-    preselected.forEach((item, index) => {
-      if (!item.barcode?.trim()) return;
-      const key = selectionKey(item, `pre-${index}`);
-      map.set(key, {
-        ...item,
-        quantity: Math.max(1, item.quantity ?? 1),
+    if (open && !wasOpen.current) {
+      const map = new Map<string, SelectedLabel>();
+      preselectedRef.current.forEach((item) => {
+        if (!item.barcode?.trim()) return;
+        const key = itemKey(item);
+        map.set(key, {
+          ...item,
+          quantity: Math.max(1, item.quantity ?? 1),
+        });
       });
-    });
-    setSelected(map);
-    setSearch('');
-  }, [open, preselected]);
+      setSelected(map);
+      setSearch('');
+    }
+    if (!open) {
+      setSelected(new Map());
+      setSearch('');
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   const { data: products = [], isFetching } = useQuery({
     queryKey: ['products-labels', debounced],
     queryFn: () =>
       api
         .get('/products', {
-          params: { search: debounced.trim() || undefined, limit: 50 },
+          params: { search: debounced.trim() || undefined, limit: 80 },
         })
         .then((r) => r.data.data as Product[]),
     enabled: open,
@@ -65,35 +75,31 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     [selected]
   );
 
-  const findSelectedKey = (product: Product) => {
-    if (selected.has(product.id)) return product.id;
-    for (const [key, item] of selected) {
+  const isInList = (product: Product) => {
+    const key = itemKey(
+      { barcode: product.barcode!, internalCode: product.internalCode },
+      product.id
+    );
+    if (selected.has(product.id) || selected.has(key)) return true;
+    for (const item of selected.values()) {
       if (item.barcode === product.barcode && item.internalCode === product.internalCode) {
-        return key;
+        return true;
       }
     }
-    return null;
+    return false;
   };
 
-  const toggle = (product: Product) => {
-    if (!product.barcode?.trim()) return;
+  const addToList = (product: Product) => {
+    if (!product.barcode?.trim()) {
+      toast.error('Este item não possui código de barras');
+      return;
+    }
+    if (isInList(product)) {
+      toast.message('Item já está na lista de impressão');
+      return;
+    }
     setSelected((prev) => {
       const next = new Map(prev);
-      const existingKey = (() => {
-        if (next.has(product.id)) return product.id;
-        for (const [key, item] of next) {
-          if (item.barcode === product.barcode && item.internalCode === product.internalCode) {
-            return key;
-          }
-        }
-        return null;
-      })();
-
-      if (existingKey) {
-        next.delete(existingKey);
-        return next;
-      }
-
       next.set(product.id, {
         name: product.name,
         barcode: product.barcode!,
@@ -125,14 +131,12 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     });
   };
 
+  const clearList = () => setSelected(new Map());
+
   const handlePrint = () => {
     const items = Array.from(selected.values());
     if (!items.length) {
-      toast.error('Selecione ao menos um item com código de barras');
-      return;
-    }
-    if (totalLabels < 1) {
-      toast.error('Informe a quantidade de etiquetas');
+      toast.error('Adicione ao menos um item à lista de impressão');
       return;
     }
     setPrinting(true);
@@ -157,14 +161,14 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-slate-500">
-            {selected.size} item(ns) · {totalLabels} etiqueta(s)
+            {selected.size} item(ns) na lista · {totalLabels} etiqueta(s)
           </p>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
             <Button onClick={handlePrint} loading={printing} disabled={!selected.size}>
-              <Printer className="h-4 w-4" /> Imprimir
+              <Printer className="h-4 w-4" /> Imprimir lista
             </Button>
           </div>
         </div>
@@ -172,16 +176,32 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
     >
       <div className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Selecione produtos e kits com código de barras e informe quantas etiquetas de cada um.
+          Monte a lista buscando e adicionando vários produtos ou kits. Depois defina a quantidade
+          de cada etiqueta.
         </p>
 
-        {selectedEntries.length > 0 && (
-          <div className="space-y-2">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Selecionados
+              Lista para impressão
             </h3>
-            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-primary-200 bg-primary-50/40 dark:border-primary-900 dark:bg-primary-950/20">
-              {selectedEntries.map(([key, item]) => (
+            {selectedEntries.length > 0 && (
+              <button
+                type="button"
+                onClick={clearList}
+                className="text-xs font-medium text-slate-500 hover:text-red-600"
+              >
+                Limpar lista
+              </button>
+            )}
+          </div>
+          <ul className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-primary-200 bg-primary-50/40 dark:border-primary-900 dark:bg-primary-950/20">
+            {selectedEntries.length === 0 ? (
+              <li className="px-3 py-6 text-center text-sm text-slate-500">
+                Nenhum item na lista. Busque abaixo e clique em <strong>Adicionar</strong>.
+              </li>
+            ) : (
+              selectedEntries.map(([key, item]) => (
                 <li
                   key={key}
                   className={cn(
@@ -206,7 +226,6 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
                       max={500}
                       value={item.quantity}
                       onChange={(e) => setQuantity(key, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
                       className="input-field w-16 px-2 py-1 text-center text-sm"
                       aria-label={`Quantidade de etiquetas de ${item.name}`}
                     />
@@ -220,51 +239,49 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
                     <X className="h-4 w-4" />
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar produto ou kit..."
-            className="input-field w-full pl-9"
-          />
+              ))
+            )}
+          </ul>
         </div>
 
-        <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-surface-border dark:border-slate-600">
-          {isFetching && (
-            <li className="px-3 py-4 text-center text-sm text-slate-500">Buscando...</li>
-          )}
-          {!isFetching && withBarcode.length === 0 && (
-            <li className="px-3 py-4 text-center text-sm text-slate-500">
-              Nenhum item com código de barras encontrado
-              {!debounced.trim() && (
-                <span className="mt-1 block text-xs">Digite para buscar produtos ou kits</span>
-              )}
-            </li>
-          )}
-          {withBarcode.map((p) => {
-            const isKit = p.productType === 'KIT';
-            const checked = !!findSelectedKey(p);
-            return (
-              <li key={p.id}>
-                <label
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Buscar e adicionar
+          </h3>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Digite nome, código ou barras..."
+              className="input-field w-full pl-9"
+            />
+          </div>
+
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-surface-border dark:border-slate-600">
+            {isFetching && (
+              <li className="px-3 py-4 text-center text-sm text-slate-500">Buscando...</li>
+            )}
+            {!isFetching && withBarcode.length === 0 && (
+              <li className="px-3 py-4 text-center text-sm text-slate-500">
+                Nenhum item com código de barras encontrado
+                {!debounced.trim() && (
+                  <span className="mt-1 block text-xs">Digite para buscar produtos ou kits</span>
+                )}
+              </li>
+            )}
+            {withBarcode.map((p) => {
+              const isKit = p.productType === 'KIT';
+              const already = isInList(p);
+              return (
+                <li
+                  key={p.id}
                   className={cn(
-                    'flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50',
+                    'flex items-center gap-3 px-3 py-2 text-sm',
                     kitRowClassName(isKit),
-                    checked && 'bg-primary-50/50 dark:bg-primary-950/30'
+                    already && 'opacity-70'
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggle(p)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600"
-                  />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
                       {formatProductName(p.name)}
@@ -274,11 +291,26 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
                       {p.internalCode} · {p.barcode}
                     </span>
                   </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={already ? 'secondary' : 'primary'}
+                    disabled={already}
+                    onClick={() => addToList(p)}
+                  >
+                    {already ? (
+                      'Na lista'
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5" /> Adicionar
+                      </>
+                    )}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     </Modal>
   );
