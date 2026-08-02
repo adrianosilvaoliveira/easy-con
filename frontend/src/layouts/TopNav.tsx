@@ -104,22 +104,19 @@ export function TopNav() {
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  /** Aquece o cache da rota alvo ao passar o mouse, deixando a navegação instantânea. */
+  /**
+   * Prefetch leve no hover. Dashboard não entra aqui (endpoint pesado).
+   * prefetchQuery respeita staleTime — cache fresco = zero request.
+   */
   const prefetchRoute = (to: string) => {
-    if (to === '/') {
-      queryClient.prefetchQuery({
-        queryKey: ['dashboard'],
-        queryFn: () => api.get('/dashboard').then((r) => r.data.data),
-        staleTime: 2 * 60_000,
-      });
-    } else if (to === '/vencimentos') {
-      queryClient.prefetchQuery({
+    if (to === '/vencimentos') {
+      void queryClient.prefetchQuery({
         queryKey: ['batches-dashboard'],
         queryFn: () => api.get('/batches/dashboard').then((r) => r.data.data),
-        staleTime: 2 * 60_000,
+        staleTime: 5 * 60_000,
       });
     } else if (STOCK_ROUTES.includes(to)) {
-      queryClient.prefetchQuery({
+      void queryClient.prefetchQuery({
         queryKey: queryKeys.stockLocations,
         queryFn: () => api.get('/stock/locations').then((r) => r.data.data),
         staleTime: 5 * 60_000,

@@ -166,43 +166,32 @@ O repositório está preparado para **dois serviços** no mesmo projeto (recurso
 | Frontend (Vite) | `frontend/` | `/` |
 | Backend (Express serverless) | `backend/` | `/_/backend` |
 
-### 1. Banco de dados — Vercel Postgres
+### 1. Banco de dados — Supabase (PostgreSQL)
 
-O backend usa **PostgreSQL** via Prisma. Em produção, use **Vercel Postgres** (Storage no painel do projeto).
+O backend usa **PostgreSQL** via Prisma. Em produção, use **Supabase** (Vercel → Storage → Supabase) como host do Postgres. O ORM e a auth JWT do app **não mudam**.
 
 #### Criar e conectar
 
 1. Vercel → projeto **constock** (ou o seu) → aba **Storage**.
-2. **Create Database** → **Postgres** → escolha região e crie.
-3. **Connect to Project** → marque o projeto e o ambiente **Production** e **Preview**.
-4. Confirme que as variáveis aparecem no serviço **backend** (monorepo):
-   - `POSTGRES_PRISMA_URL` — conexão com pool (runtime)
-   - `POSTGRES_URL_NON_POOLING` — conexão direta (migrations)
-
-O código mapeia automaticamente para o Prisma:
+2. **Create Database** → **Supabase** → escolha região e crie (ex.: `supabase-cerise-kite`).
+3. **Connect to Project** → marque o projeto e os ambientes **Production** e **Preview**.
+4. No serviço **backend**, a integração Supabase injeta vars com prefixo `ARMAZENAMENTO_` (nome do storage). O app mapeia automaticamente:
 
 | Variável Vercel | Uso no Prisma |
 |-----------------|---------------|
-| `POSTGRES_PRISMA_URL` | `DATABASE_URL` (queries) |
-| `POSTGRES_URL_NON_POOLING` | `DIRECT_URL` (migrate deploy) |
+| `ARMAZENAMENTO_POSTGRES_PRISMA_URL` | `DATABASE_URL` (pooler / queries) |
+| `ARMAZENAMENTO_POSTGRES_URL_NON_POOLING` | `DIRECT_URL` (migrations) |
 
-Não é obrigatório copiar manualmente, desde que as variáveis `POSTGRES_*` estejam no serviço **backend**.
+Também aceita `DATABASE_URL` / `DIRECT_URL` manuais ou `POSTGRES_*` legados. Com **dois** storages linkados, `ARMAZENAMENTO_*` tem prioridade sobre o Prisma Postgres antigo.
 
-5. **Redeploy** do backend — o build executa `prisma migrate deploy` e cria as tabelas.
-6. **Seed** (usuários iniciais), uma vez — as URLs do Postgres **não vêm preenchidas** no `vercel env pull`; copie do painel:
+No `vercel-build`, `scripts/run-supabase-data-migration.js` copia os dados do Postgres antigo para o Supabase **uma vez** (idempotente se o destino já tiver users).
 
-   1. Vercel → **Storage** → banco Postgres → aba **`.env.local`** (ou **Connect**).
-   2. Copie `DATABASE_URL` / `PRISMA_DATABASE_URL` e `POSTGRES_URL`.
-   3. Crie `backend/.env.vercel` (modelo em `backend/.env.vercel.example`):
-      ```env
-      DATABASE_URL="<PRISMA_DATABASE_URL ou DATABASE_URL>"
-      DIRECT_URL="<POSTGRES_URL>"
-      ```
-   4. Rode o script:
-      ```powershell
-      cd backend
-      .\scripts\seed-vercel.ps1
-      ```
+5. **Redeploy** do backend — o build executa `prisma migrate deploy`.
+6. **Migrar dados** de um Postgres antigo (sem seed em produção):
+   1. Copie as URLs em `backend/.env.supabase` (modelo: `backend/.env.supabase.example`).
+   2. Rode `.\scripts\migrate-prisma-to-supabase.ps1` (Docker + `postgres:17`).
+   3. Compare as contagens em `backend/scripts/data/counts-*.txt`.
+7. **Seed** só em banco **vazio** (dev). URLs não vêm no `vercel env pull` — copie do painel Storage → `.env.local` para `backend/.env.vercel` (modelo: `backend/.env.vercel.example`) e use `.\scripts\seed-vercel.ps1`.
 
    **Login após o seed:** `admin@hospital.com` / `Admin@123` (troque a senha depois).
 
@@ -214,7 +203,7 @@ docker compose up -d postgres
 
 Copie `backend/.env.example` → `backend/.env` (`DATABASE_URL` e `DIRECT_URL` iguais no Docker).
 
-**Sincronizar com o banco da Vercel:** `vercel env pull backend/.env` na pasta do projeto.
+**Sincronizar envs da Vercel:** `vercel env pull backend/.env` na pasta do projeto (URLs de Storage podem vir vazias — copie do painel).
 
 ### 2. Importar no painel Vercel
 
@@ -226,8 +215,8 @@ Copie `backend/.env.example` → `backend/.env` (`DATABASE_URL` e `DIRECT_URL` i
 
 | Variável | Obrigatória | Descrição |
 |----------|-------------|-----------|
-| `DATABASE_URL` / `POSTGRES_PRISMA_URL` | Sim | Vercel Postgres preenche `POSTGRES_*` automaticamente |
-| `DIRECT_URL` / `POSTGRES_URL_NON_POOLING` | Sim (migrations) | Conexão direta para `prisma migrate deploy` |
+| `ARMAZENAMENTO_POSTGRES_PRISMA_URL` (ou `DATABASE_URL`) | Sim | Pooler Supabase (runtime) |
+| `ARMAZENAMENTO_POSTGRES_URL_NON_POOLING` (ou `DIRECT_URL`) | Sim | Direto/session pooler (migrations) |
 | `JWT_SECRET` | Sim | Mín. 32 caracteres |
 | `JWT_REFRESH_SECRET` | Sim | Mín. 32 caracteres |
 | `NODE_ENV` | Sim | `production` |

@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../../database/prisma';
 import { PdfProvider } from '../../providers/PdfProvider';
-import { MovementType } from '@prisma/client';
+import { MovementType, Prisma } from '@prisma/client';
 import {
   batchReportInclude,
   buildBatchReportWhere,
@@ -9,6 +9,7 @@ import {
   type BatchReportFilters,
 } from './batchReportFilters';
 import { statusLabel } from '../../shared/utils/expiration';
+import { REPORT_LIMITS } from './reportLimits';
 
 const ENTRY_TYPES: MovementType[] = [
   'ENTRADA_COMPRA',
@@ -56,11 +57,20 @@ export class ReportService {
         { location: { name: 'asc' } },
         { batch: { expirationDate: 'asc' } },
       ],
-      take: 5000,
-      include: {
-        product: { include: { category: true } },
-        location: true,
-        batch: true,
+      take: REPORT_LIMITS.stock,
+      select: {
+        quantity: true,
+        product: {
+          select: {
+            name: true,
+            internalCode: true,
+            unit: true,
+            minQuantity: true,
+            category: { select: { name: true } },
+          },
+        },
+        location: { select: { name: true } },
+        batch: { select: { batchNumber: true, expirationDate: true } },
       },
     });
 
@@ -102,7 +112,7 @@ export class ReportService {
         ...(filters.type && { type: filters.type as MovementType }),
       },
       orderBy: { movementDate: 'desc' },
-      take: 500,
+      take: REPORT_LIMITS.movements,
       include: {
         product: { select: { name: true, internalCode: true } },
         user: { select: { name: true } },
@@ -141,7 +151,7 @@ export class ReportService {
         ...(filters.endDate && { movementDate: { lte: new Date(filters.endDate) } }),
       },
       orderBy: { movementDate: 'desc' },
-      take: 500,
+      take: REPORT_LIMITS.movements,
       include: {
         product: true,
         supplier: true,
@@ -179,7 +189,7 @@ export class ReportService {
         ...(filters.endDate && { movementDate: { lte: new Date(filters.endDate) } }),
       },
       orderBy: { movementDate: 'desc' },
-      take: 500,
+      take: REPORT_LIMITS.movements,
       include: { product: true, originLocation: true, user: { select: { name: true } } },
     });
 
@@ -243,7 +253,7 @@ export class ReportService {
     const batches = await prisma.productBatch.findMany({
       where: buildBatchReportWhere(reportFilters),
       orderBy: { expirationDate: 'asc' },
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: batchReportInclude,
     });
 
@@ -276,7 +286,7 @@ export class ReportService {
     const batches = await prisma.productBatch.findMany({
       where: buildBatchReportWhere(reportFilters),
       orderBy: { expirationDate: 'asc' },
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: batchReportInclude,
     });
 
@@ -306,7 +316,7 @@ export class ReportService {
     const batches = await prisma.productBatch.findMany({
       where: buildBatchReportWhere(filters),
       orderBy: [{ stockLocation: { name: 'asc' } }, { product: { name: 'asc' } }, { expirationDate: 'asc' }],
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: batchReportInclude,
     });
 
@@ -333,7 +343,7 @@ export class ReportService {
     const batches = await prisma.productBatch.findMany({
       where: buildBatchReportWhere(filters),
       orderBy: [{ stockLocation: { name: 'asc' } }, { expirationDate: 'asc' }],
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: batchReportInclude,
     });
 
@@ -369,7 +379,7 @@ export class ReportService {
         }),
       },
       orderBy: { movementDate: 'desc' },
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: {
         product: { include: { category: true } },
         batch: true,
@@ -407,7 +417,7 @@ export class ReportService {
     const expiredBatches = await prisma.productBatch.findMany({
       where: batchWhere,
       include: batchReportInclude,
-      take: 1000,
+      take: REPORT_LIMITS.discarded,
     });
 
     const movements = await prisma.stockMovement.findMany({
@@ -420,7 +430,7 @@ export class ReportService {
       },
       include: { product: true, batch: true },
       orderBy: { movementDate: 'desc' },
-      take: 1000,
+      take: REPORT_LIMITS.discarded,
     });
 
     const batchLoss = expiredBatches.reduce(
@@ -477,7 +487,7 @@ export class ReportService {
         ...(filters.productId && { entityId: filters.productId }),
       },
       orderBy: { createdAt: 'desc' },
-      take: 2000,
+      take: REPORT_LIMITS.batches,
       include: { user: { select: { name: true } } },
     });
 
@@ -504,14 +514,24 @@ export class ReportService {
   }
 
   static async belowMinPdf(res: Response, userName?: string) {
-    const products = await prisma.product.findMany({
-      where: { active: true },
-      include: { stockItems: true, category: true },
-    });
+    type BelowMinRow = {
+      internalCode: string;
+      name: string;
+      minQuantity: number;
+      current: number;
+    };
 
-    const below = products.filter(
-      (p) => p.stockItems.reduce((s, i) => s + i.quantity, 0) < p.minQuantity
-    );
+    const below = await prisma.$queryRaw<BelowMinRow[]>(Prisma.sql`
+      SELECT p."internalCode" AS "internalCode", p.name,
+        p."minQuantity" AS "minQuantity",
+        COALESCE(SUM(si.quantity), 0)::int AS current
+      FROM products p
+      LEFT JOIN stock_items si ON si."productId" = p.id
+      WHERE p.active = true
+      GROUP BY p.id
+      HAVING COALESCE(SUM(si.quantity), 0) < p."minQuantity"
+      ORDER BY p.name
+    `);
 
     await PdfProvider.generate(res, {
       title: 'Produtos Abaixo do Estoque Mínimo',
@@ -524,16 +544,13 @@ export class ReportService {
         { header: 'Atual', key: 'current' },
         { header: 'Déficit', key: 'deficit' },
       ],
-      rows: below.map((p) => {
-        const current = p.stockItems.reduce((s, i) => s + i.quantity, 0);
-        return {
-          code: p.internalCode,
-          product: p.name,
-          min: p.minQuantity,
-          current,
-          deficit: p.minQuantity - current,
-        };
-      }),
+      rows: below.map((p) => ({
+        code: p.internalCode,
+        product: p.name,
+        min: p.minQuantity,
+        current: p.current,
+        deficit: p.minQuantity - p.current,
+      })),
     });
   }
 
@@ -548,7 +565,7 @@ export class ReportService {
         ...(filters.endDate && { createdAt: { lte: new Date(filters.endDate) } }),
       },
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: REPORT_LIMITS.movements,
       include: { user: { select: { name: true } } },
     });
 

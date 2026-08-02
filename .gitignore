@@ -5,7 +5,12 @@ backend/public/
 frontend/dist/
 .env
 .env.vercel
+.env.supabase
+.env.supabase.pull
 .env.production.local
+backend/scripts/data/*.dump
+backend/scripts/data/counts-*.txt
+backend/scripts/data/schema-from-prisma.sql
 *.log
 logs/
 .DS_Store

@@ -27,11 +27,13 @@ export function MovementStatusBadge({ status }: { status: string }) {
 
 function invalidateMovementQueries(queryClient: ReturnType<typeof useQueryClient>, keys: string[]) {
   keys.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
-  queryClient.invalidateQueries({ queryKey: ['stock'] });
+  // Estoque / lotes afetados pela movimentação — refetch imediato nas telas ativas.
   queryClient.invalidateQueries({ queryKey: ['stock-items'] });
   queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
   queryClient.invalidateQueries({ queryKey: ['batches'] });
-  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  // Dashboard: só marca stale (sem refetch agora) — evita SQL pesado fora da home.
+  queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'none' });
+  queryClient.invalidateQueries({ queryKey: ['batches-dashboard'], refetchType: 'none' });
 }
 
 /** Hook compartilhado para aprovar/rejeitar uma movimentação. */

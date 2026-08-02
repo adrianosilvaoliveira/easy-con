@@ -28,7 +28,11 @@ router.use('/suppliers', supplierRoutes);
 router.use('/batches', batchesRoutes);
 router.use('/organization', organizationRoutes);
 
-router.get('/health', async (_req, res) => {
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+router.get('/health/ready', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', database: 'up', timestamp: new Date().toISOString() });

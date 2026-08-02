@@ -75,6 +75,7 @@ export class DashboardService {
       today_movements: number;
       pending_transfers: number;
       monthly_entry_value: number;
+      expiring_count: number;
     };
 
     const [kpiRows, belowMin, expiringBatches, recentMovements] = await Promise.all([
@@ -87,7 +88,11 @@ export class DashboardService {
           (SELECT COUNT(*)::int FROM stock_movements WHERE status = 'PENDENTE') AS pending_transfers,
           (SELECT COALESCE(SUM("totalValue"), 0)::float FROM stock_movements
             WHERE type IN ('ENTRADA_COMPRA', 'ENTRADA_MANUAL')
-              AND "movementDate" >= ${thirtyDaysAgo}) AS monthly_entry_value
+              AND "movementDate" >= ${thirtyDaysAgo}) AS monthly_entry_value,
+          (SELECT COUNT(*)::int FROM product_batches
+            WHERE expiration_date <= ${in30Days}
+              AND expiration_date >= ${today}
+              AND quantity > 0) AS expiring_count
       `,
       prisma.$queryRaw<BelowMinRow[]>(Prisma.sql`
         SELECT p.id, p.name, p."internalCode" AS "internalCode", p."minQuantity" AS "minQuantity",
@@ -109,14 +114,26 @@ export class DashboardService {
           },
           quantity: { gt: 0 },
         },
-        include: { product: true },
+        select: {
+          id: true,
+          batchNumber: true,
+          expirationDate: true,
+          quantity: true,
+          status: true,
+          product: { select: { id: true, name: true, internalCode: true } },
+        },
         orderBy: { expirationDate: 'asc' },
         take: 10,
       }),
       prisma.stockMovement.findMany({
         take: 10,
         orderBy: { movementDate: 'desc' },
-        include: {
+        select: {
+          id: true,
+          type: true,
+          quantity: true,
+          movementDate: true,
+          status: true,
           product: { select: { name: true, internalCode: true } },
           user: { select: { name: true } },
           originLocation: { select: { name: true } },
@@ -134,7 +151,7 @@ export class DashboardService {
         todayMovements: kpi?.today_movements ?? 0,
         pendingTransfers: kpi?.pending_transfers ?? 0,
         belowMinCount: belowMin.length,
-        expiringCount: expiringBatches.length,
+        expiringCount: kpi?.expiring_count ?? 0,
         monthlyEntryValue: kpi?.monthly_entry_value ?? 0,
       },
       belowMin,

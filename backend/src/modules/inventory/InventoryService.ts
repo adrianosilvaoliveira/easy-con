@@ -131,42 +131,52 @@ export class InventoryService {
     }
 
     if (autoAdjust) {
-      for (const item of inventory.items) {
-        if (item.divergence === 0) continue;
+      const divergent = inventory.items.filter((item) => item.divergence !== 0);
 
-        const stockItem = await prisma.stockItem.findFirst({
-          where: {
-            productId: item.productId,
-            locationId: inventory.locationId,
-            batchId: item.batchId ?? null,
-          },
-        });
-
-        if (stockItem) {
-          await prisma.stockItem.update({
-            where: { id: stockItem.id },
-            data: { quantity: item.countedQuantity },
+      if (divergent.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          const stockItems = await tx.stockItem.findMany({
+            where: {
+              locationId: inventory.locationId,
+              productId: { in: [...new Set(divergent.map((i) => i.productId))] },
+            },
           });
-        }
 
-        await prisma.inventoryItem.update({
-          where: { id: item.id },
-          data: { adjusted: true },
-        });
+          const stockKey = (productId: string, batchId: string | null) =>
+            `${productId}:${batchId ?? 'null'}`;
+          const stockMap = new Map(
+            stockItems.map((s) => [stockKey(s.productId, s.batchId), s])
+          );
 
-        await prisma.stockMovement.create({
-          data: {
-            type: item.divergence > 0 ? 'AJUSTE_ENTRADA' : 'SAIDA_PERDA',
-            status: 'CONCLUIDA',
-            productId: item.productId,
-            batchId: item.batchId,
-            quantity: Math.abs(item.divergence),
-            destinationLocationId: item.divergence > 0 ? inventory.locationId : undefined,
-            originLocationId: item.divergence < 0 ? inventory.locationId : undefined,
-            reason: `Ajuste automático de inventário #${inventoryId.slice(0, 8)}`,
-            userId,
-            movementDate: new Date(),
-          },
+          for (const item of divergent) {
+            const stockItem = stockMap.get(stockKey(item.productId, item.batchId ?? null));
+            if (stockItem) {
+              await tx.stockItem.update({
+                where: { id: stockItem.id },
+                data: { quantity: item.countedQuantity },
+              });
+            }
+
+            await tx.inventoryItem.update({
+              where: { id: item.id },
+              data: { adjusted: true },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                type: item.divergence > 0 ? 'AJUSTE_ENTRADA' : 'SAIDA_PERDA',
+                status: 'CONCLUIDA',
+                productId: item.productId,
+                batchId: item.batchId,
+                quantity: Math.abs(item.divergence),
+                destinationLocationId: item.divergence > 0 ? inventory.locationId : undefined,
+                originLocationId: item.divergence < 0 ? inventory.locationId : undefined,
+                reason: `Ajuste automático de inventário #${inventoryId.slice(0, 8)}`,
+                userId,
+                movementDate: new Date(),
+              },
+            });
+          }
         });
       }
     }
@@ -175,7 +185,9 @@ export class InventoryService {
       where: { id: inventoryId },
       data: { status: 'CONCLUIDO', completedAt: new Date() },
       include: {
-        items: { include: { product: true } },
+        items: {
+          include: { product: { select: { id: true, name: true, internalCode: true } } },
+        },
         location: true,
         user: { select: { name: true } },
       },

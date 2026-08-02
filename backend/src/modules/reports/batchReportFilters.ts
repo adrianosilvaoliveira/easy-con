@@ -53,7 +53,13 @@ export function buildReportSubtitle(filters: BatchReportFilters): string {
 }
 
 export const batchReportInclude = {
-  product: { include: { category: true } },
-  stockLocation: true,
-  supplier: true,
+  product: {
+    select: {
+      name: true,
+      internalCode: true,
+      category: { select: { name: true } },
+    },
+  },
+  stockLocation: { select: { name: true } },
+  supplier: { select: { name: true } },
 } as const;

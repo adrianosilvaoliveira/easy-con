@@ -48,6 +48,31 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
   }
 
   const seen = new Set<string>();
+  const componentIds = items.map((i) => i.componentProductId);
+  const batchIds = items.map((i) => i.batchId).filter((id): id is string => Boolean(id));
+
+  const [components, batches, batchCounts] = await Promise.all([
+    prisma.product.findMany({
+      where: { id: { in: componentIds } },
+      select: { id: true, name: true, productType: true, active: true },
+    }),
+    batchIds.length
+      ? prisma.productBatch.findMany({
+          where: { id: { in: batchIds } },
+          select: { id: true, productId: true },
+        })
+      : Promise.resolve([] as { id: string; productId: string }[]),
+    prisma.productBatch.groupBy({
+      by: ['productId'],
+      where: { productId: { in: componentIds } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const componentMap = new Map(components.map((c) => [c.id, c]));
+  const batchMap = new Map(batches.map((b) => [b.id, b]));
+  const batchCountMap = new Map(batchCounts.map((b) => [b.productId, b._count._all]));
+
   for (const item of items) {
     const key = `${item.componentProductId}:${item.batchId ?? 'none'}`;
     if (seen.has(key)) {
@@ -55,10 +80,7 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
     }
     seen.add(key);
 
-    const component = await prisma.product.findUnique({
-      where: { id: item.componentProductId },
-      select: { id: true, name: true, productType: true, active: true },
-    });
+    const component = componentMap.get(item.componentProductId);
     if (!component || !component.active) {
       throw new ValidationError('Produto componente inválido ou inativo');
     }
@@ -66,10 +88,7 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
       throw new ValidationError(`"${component.name}" é um kit e não pode compor outro kit`);
     }
 
-    const batchCount = await prisma.productBatch.count({
-      where: { productId: item.componentProductId },
-    });
-    const hasLots = batchCount > 0;
+    const hasLots = (batchCountMap.get(item.componentProductId) ?? 0) > 0;
 
     if (hasLots && !item.batchId) {
       throw new ValidationError(
@@ -78,10 +97,8 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
     }
 
     if (item.batchId) {
-      const batch = await prisma.productBatch.findFirst({
-        where: { id: item.batchId, productId: item.componentProductId },
-      });
-      if (!batch) {
+      const batch = batchMap.get(item.batchId);
+      if (!batch || batch.productId !== item.componentProductId) {
         throw new ValidationError(`Lote inválido para o produto "${component.name}"`);
       }
     }
@@ -129,48 +146,81 @@ export class ProductService {
       where.productType = 'PRODUCT';
     }
 
+    if (filters.expiringDays) {
+      const days = parseInt(filters.expiringDays, 10);
+      const now = new Date();
+      const limit = new Date();
+      limit.setDate(limit.getDate() + days);
+      where.batches = {
+        some: {
+          expirationDate: { lte: limit, gte: now },
+          quantity: { gt: 0 },
+        },
+      };
+    }
+
+    if (filters.belowMin === 'true') {
+      const rows = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT p.id
+        FROM products p
+        LEFT JOIN stock_items si ON si."productId" = p.id
+        WHERE (${filters.includeInactive === 'true'} OR p.active = true)
+        GROUP BY p.id, p."minQuantity"
+        HAVING COALESCE(SUM(si.quantity), 0) < p."minQuantity"
+      `;
+      if (rows.length === 0) {
+        return buildPaginatedResult([], 0, pagination);
+      }
+      where.id = { in: rows.map((r) => r.id) };
+    }
+
     const [data, total] = await Promise.all([
       prisma.product.findMany({
         where,
         skip: pagination.skip,
         take: pagination.limit,
         orderBy: { name: 'asc' },
-        include: {
-          category: true,
-          stockItems: { include: { location: true, batch: true } },
-          batches: { orderBy: { expirationDate: 'asc' } },
-          kitItems: {
-            include: {
-              componentProduct: {
-                select: { id: true, name: true, internalCode: true },
-              },
-              batch: { select: { id: true, batchNumber: true, expirationDate: true } },
-            },
-          },
+        select: {
+          id: true,
+          name: true,
+          internalCode: true,
+          barcode: true,
+          productType: true,
+          categoryId: true,
+          manufacturer: true,
+          unit: true,
+          minQuantity: true,
+          notes: true,
+          active: true,
+          createdAt: true,
+          updatedAt: true,
+          category: { select: { id: true, name: true } },
+          _count: { select: { kitItems: true } },
         },
       }),
       prisma.product.count({ where }),
     ]);
 
-    let enriched = data.map((p) => ({
-      ...p,
-      totalStock: p.stockItems.reduce((s, i) => s + i.quantity, 0),
-    }));
+    const stockSums =
+      data.length === 0
+        ? []
+        : await prisma.stockItem.groupBy({
+            by: ['productId'],
+            where: { productId: { in: data.map((p) => p.id) } },
+            _sum: { quantity: true },
+          });
+    const stockMap = new Map(stockSums.map((s) => [s.productId, s._sum.quantity ?? 0]));
 
-    if (filters.belowMin === 'true') {
-      enriched = enriched.filter((p) => p.totalStock < p.minQuantity);
-    }
+    const enriched = data.map((p) => {
+      const { _count, ...rest } = p;
+      return {
+        ...rest,
+        totalStock: stockMap.get(p.id) ?? 0,
+        kitItems: Array.from({ length: _count.kitItems }, () => ({})),
+      };
+    });
 
-    if (filters.expiringDays) {
-      const days = parseInt(filters.expiringDays, 10);
-      const limit = new Date();
-      limit.setDate(limit.getDate() + days);
-      enriched = enriched.filter((p) =>
-        p.batches.some((b) => b.expirationDate <= limit && b.expirationDate >= new Date())
-      );
-    }
-
-    return buildPaginatedResult(enriched, filters.belowMin || filters.expiringDays ? enriched.length : total, pagination);
+    return buildPaginatedResult(enriched, total, pagination);
   }
 
   static async findById(id: string) {

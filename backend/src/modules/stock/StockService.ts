@@ -1,7 +1,6 @@
 import { prisma } from '../../database/prisma';
 import { NotFoundError, ValidationError } from '../../shared/errors/AppError';
 import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagination';
-import { applyActiveFilter } from '../../shared/utils/activeFilter';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { createLocationSchema, updateLocationSchema } from './stock.dto';
@@ -9,33 +8,52 @@ import { createLocationSchema, updateLocationSchema } from './stock.dto';
 type CreateLocationDTO = z.infer<typeof createLocationSchema>;
 type UpdateLocationDTO = z.infer<typeof updateLocationSchema>;
 
+interface LocationAggRow {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  description: string | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  totalQuantity: number;
+  productCount: number;
+}
+
+interface BelowMinRow {
+  id: string;
+  name: string;
+  internalCode: string;
+  minQuantity: number;
+  current: number;
+}
+
 export class StockService {
   static async listLocations(filters: Record<string, string | undefined> = {}) {
-    return prisma.stockLocation.findMany({
-      where: {
-        ...applyActiveFilter(filters.includeInactive),
-        ...(filters.search && {
-          OR: [
-            { name: { contains: filters.search, mode: 'insensitive' } },
-            { code: { contains: filters.search, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      orderBy: { name: 'asc' },
-      include: {
-        stockItems: {
-          where: { quantity: { gt: 0 } },
-          select: { quantity: true, productId: true },
-        },
-      },
-    }).then((locations) =>
-      locations.map((loc) => ({
-        ...loc,
-        totalQuantity: loc.stockItems.reduce((s, i) => s + i.quantity, 0),
-        productCount: new Set(loc.stockItems.map((i) => i.productId)).size,
-        stockItems: undefined,
-      }))
-    );
+    const includeInactive = filters.includeInactive === 'true';
+    const search = filters.search?.trim();
+
+    const activeClause = includeInactive ? Prisma.sql`TRUE` : Prisma.sql`l.active = true`;
+    const searchClause = search
+      ? Prisma.sql`AND (l.name ILIKE ${`%${search}%`} OR l.code ILIKE ${`%${search}%`})`
+      : Prisma.empty;
+
+    const rows = await prisma.$queryRaw<LocationAggRow[]>(Prisma.sql`
+      SELECT
+        l.id, l.name, l.code, l.type, l.description, l.active,
+        l."createdAt", l."updatedAt",
+        COALESCE(SUM(si.quantity) FILTER (WHERE si.quantity > 0), 0)::int AS "totalQuantity",
+        COUNT(DISTINCT si."productId") FILTER (WHERE si.quantity > 0)::int AS "productCount"
+      FROM stock_locations l
+      LEFT JOIN stock_items si ON si."locationId" = l.id
+      WHERE ${activeClause}
+      ${searchClause}
+      GROUP BY l.id
+      ORDER BY l.name ASC
+    `);
+
+    return rows;
   }
 
   static async findLocation(id: string) {
@@ -54,6 +72,15 @@ export class StockService {
     return location;
   }
 
+  /** Existência leve — evita carregar o grafo de estoque em mutações. */
+  private static async assertLocationExists(id: string) {
+    const location = await prisma.stockLocation.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!location) throw new NotFoundError('Local de estoque não encontrado');
+  }
+
   static async createLocation(data: CreateLocationDTO) {
     const exists = await prisma.stockLocation.findUnique({ where: { code: data.code } });
     if (exists) throw new ValidationError('Código do local já existe');
@@ -61,7 +88,7 @@ export class StockService {
   }
 
   static async updateLocation(id: string, data: UpdateLocationDTO) {
-    await this.findLocation(id);
+    await this.assertLocationExists(id);
     if (data.code) {
       const exists = await prisma.stockLocation.findFirst({
         where: { code: data.code, NOT: { id } },
@@ -81,14 +108,14 @@ export class StockService {
   }
 
   static async deactivateLocation(id: string) {
-    await this.findLocation(id);
+    await this.assertLocationExists(id);
     await prisma.stockLocation.update({ where: { id }, data: { active: false } });
     return { message: 'Local desativado' };
   }
 
   /** Verifica se o local pode ser excluído sem afetar produtos nem relatórios históricos */
   static async getLocationDeleteCheck(id: string) {
-    await this.findLocation(id);
+    await this.assertLocationExists(id);
 
     const [
       stockItemsCount,
@@ -193,9 +220,29 @@ export class StockService {
         skip: pagination.skip,
         take: pagination.limit,
         include: {
-          product: { include: { category: true } },
-          location: true,
-          batch: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              internalCode: true,
+              barcode: true,
+              productType: true,
+              active: true,
+              minQuantity: true,
+              unit: true,
+              category: { select: { id: true, name: true } },
+            },
+          },
+          location: { select: { id: true, name: true, code: true, type: true } },
+          batch: {
+            select: {
+              id: true,
+              batchNumber: true,
+              expirationDate: true,
+              status: true,
+              quantity: true,
+            },
+          },
         },
         orderBy: { product: { name: 'asc' } },
       }),
@@ -206,35 +253,37 @@ export class StockService {
   }
 
   static async getAlerts() {
-    const products = await prisma.product.findMany({
-      where: { active: true },
-      include: {
-        stockItems: true,
-        batches: { where: { expirationDate: { lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } } },
-      },
-    });
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const belowMin = products
-      .filter((p) => p.stockItems.reduce((s, i) => s + i.quantity, 0) < p.minQuantity)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        internalCode: p.internalCode,
-        minQuantity: p.minQuantity,
-        current: p.stockItems.reduce((s, i) => s + i.quantity, 0),
-      }));
-
-    const expiring = await prisma.productBatch.findMany({
-      where: {
-        expirationDate: {
-          lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          gte: new Date(),
+    const [belowMin, expiring] = await Promise.all([
+      prisma.$queryRaw<BelowMinRow[]>(Prisma.sql`
+        SELECT p.id, p.name, p."internalCode" AS "internalCode",
+          p."minQuantity" AS "minQuantity",
+          COALESCE(SUM(si.quantity), 0)::int AS current
+        FROM products p
+        LEFT JOIN stock_items si ON si."productId" = p.id
+        WHERE p.active = true
+        GROUP BY p.id
+        HAVING COALESCE(SUM(si.quantity), 0) < p."minQuantity"
+        ORDER BY p.name
+      `),
+      prisma.productBatch.findMany({
+        where: {
+          expirationDate: { lte: in30Days, gte: new Date() },
+          quantity: { gt: 0 },
         },
-        quantity: { gt: 0 },
-      },
-      include: { product: true },
-      orderBy: { expirationDate: 'asc' },
-    });
+        select: {
+          id: true,
+          batchNumber: true,
+          expirationDate: true,
+          quantity: true,
+          status: true,
+          product: { select: { id: true, name: true, internalCode: true } },
+        },
+        orderBy: { expirationDate: 'asc' },
+        take: 100,
+      }),
+    ]);
 
     return { belowMin, expiring };
   }

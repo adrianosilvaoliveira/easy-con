@@ -40,7 +40,7 @@ class MemoryCache {
 export const memoryCache = new MemoryCache();
 
 /** TTL do snapshot de auth (pv/active) — reduz 1 query Prisma por request autenticada. */
-export const AUTH_ACCOUNT_TTL_MS = 60_000;
+export const AUTH_ACCOUNT_TTL_MS = 5 * 60_000;
 
 export const CACHE_KEYS = {
   dashboardMetrics: 'dashboard:metrics',

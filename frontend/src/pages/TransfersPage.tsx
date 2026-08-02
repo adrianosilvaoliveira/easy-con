@@ -136,7 +136,7 @@ export function TransfersPage() {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'none' });
       setModalOpen(false);
       reset();
     },

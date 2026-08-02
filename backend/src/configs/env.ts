@@ -3,20 +3,31 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-/** Vercel Postgres: POSTGRES_*, PRISMA_DATABASE_URL ou DATABASE_URL */
-if (!process.env.DATABASE_URL && process.env.PRISMA_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.PRISMA_DATABASE_URL;
+/** Supabase (Vercel Storage ARMAZENAMENTO_*) > POSTGRES_* > PRISMA_* / DATABASE_URL */
+function envHas(v: string | undefined): boolean {
+  return Boolean(v && v.trim() && v !== '[SENSITIVE]');
 }
-if (!process.env.DATABASE_URL && process.env.POSTGRES_PRISMA_URL) {
+
+if (envHas(process.env.ARMAZENAMENTO_POSTGRES_PRISMA_URL)) {
+  process.env.DATABASE_URL = process.env.ARMAZENAMENTO_POSTGRES_PRISMA_URL;
+} else if (envHas(process.env.ARMAZENAMENTO_POSTGRES_URL)) {
+  process.env.DATABASE_URL = process.env.ARMAZENAMENTO_POSTGRES_URL;
+} else if (!envHas(process.env.DATABASE_URL) && envHas(process.env.PRISMA_DATABASE_URL)) {
+  process.env.DATABASE_URL = process.env.PRISMA_DATABASE_URL;
+} else if (!envHas(process.env.DATABASE_URL) && envHas(process.env.POSTGRES_PRISMA_URL)) {
   process.env.DATABASE_URL = process.env.POSTGRES_PRISMA_URL;
 }
-if (!process.env.DIRECT_URL && process.env.POSTGRES_URL_NON_POOLING) {
+
+if (envHas(process.env.ARMAZENAMENTO_POSTGRES_URL_NON_POOLING)) {
+  process.env.DIRECT_URL = process.env.ARMAZENAMENTO_POSTGRES_URL_NON_POOLING;
+} else if (envHas(process.env.ARMAZENAMENTO_POSTGRES_URL) && !envHas(process.env.DIRECT_URL)) {
+  process.env.DIRECT_URL = process.env.ARMAZENAMENTO_POSTGRES_URL;
+} else if (!envHas(process.env.DIRECT_URL) && envHas(process.env.POSTGRES_URL_NON_POOLING)) {
   process.env.DIRECT_URL = process.env.POSTGRES_URL_NON_POOLING;
-}
-if (!process.env.DIRECT_URL && process.env.POSTGRES_URL) {
+} else if (!envHas(process.env.DIRECT_URL) && envHas(process.env.POSTGRES_URL)) {
   process.env.DIRECT_URL = process.env.POSTGRES_URL;
 }
-if (!process.env.DIRECT_URL && process.env.DATABASE_URL) {
+if (!envHas(process.env.DIRECT_URL) && envHas(process.env.DATABASE_URL)) {
   process.env.DIRECT_URL = process.env.DATABASE_URL;
 }
 
