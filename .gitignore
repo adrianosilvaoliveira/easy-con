@@ -8,6 +8,11 @@ frontend/dist/
 .env.supabase
 .env.supabase.pull
 .env.production.local
+.env.production.pull
+.env.prod-copy
+backend/.env.prod-copy
+backend/.env.production.pull
+backend/.env.jwt-tmp
 backend/scripts/data/*.dump
 backend/scripts/data/counts-*.txt
 backend/scripts/data/schema-from-prisma.sql
@@ -19,3 +24,8 @@ coverage/
 .idea/
 *.pem
 .vercel
+
+.env.prod-copy
+.env.production.pull
+backend/.env.prod-copy
+.env*

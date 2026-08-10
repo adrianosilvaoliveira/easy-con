@@ -33,13 +33,23 @@ router.get('/health', (_req, res) => {
 });
 
 router.get('/health/ready', async (_req, res) => {
+  const dbHost =
+    ((process.env.DATABASE_URL || '').match(/@([^:/?]+)/) || [])[1] || null;
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', database: 'up', timestamp: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      database: 'up',
+      dbHost,
+      timestamp: new Date().toISOString(),
+    });
   } catch {
-    res
-      .status(503)
-      .json({ status: 'degraded', database: 'down', timestamp: new Date().toISOString() });
+    res.status(503).json({
+      status: 'degraded',
+      database: 'down',
+      dbHost,
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 
