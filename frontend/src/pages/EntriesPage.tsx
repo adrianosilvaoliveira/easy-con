@@ -9,13 +9,19 @@ import api from '@/services/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Input } from '@/components/ui/Input';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { SupplierSearchSelect } from '@/components/suppliers/SupplierSearchSelect';
 import type { StockMovement, PaginatedResponse } from '@/types';
-import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
+import {
+  formatDateTime,
+  movementTypeLabel,
+  formatProductName,
+  MAX_UNIT_PRICE,
+} from '@/utils/format';
 import {
   MovementStatusBadge,
 } from '@/components/movements/MovementApprovalActions';
@@ -30,7 +36,14 @@ const batchLineSchema = z.object({
   manufacturingDate: z.string().min(1, 'Fabricação obrigatória'),
   expirationDate: z.string().min(1, 'Validade obrigatória'),
   quantity: z.coerce.number().int().positive('Qtd inválida'),
-  unitPrice: z.coerce.number().positive().optional().or(z.literal('')),
+  unitPrice: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z
+      .number({ invalid_type_error: 'Valor inválido' })
+      .positive('Valor deve ser maior que zero')
+      .max(MAX_UNIT_PRICE, 'Máximo R$ 100.000,00')
+      .optional()
+  ),
 });
 
 const entrySchema = z
@@ -354,11 +367,19 @@ export function EntriesPage() {
                       error={errors.batches?.[index]?.quantity?.message}
                       {...register(`batches.${index}.quantity`)}
                     />
-                    <Input
-                      label="Valor unitário"
-                      type="number"
-                      step="0.01"
-                      {...register(`batches.${index}.unitPrice`)}
+                    <Controller
+                      control={control}
+                      name={`batches.${index}.unitPrice`}
+                      render={({ field }) => (
+                        <CurrencyInput
+                          label="Valor unitário"
+                          value={field.value as number | undefined}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          max={MAX_UNIT_PRICE}
+                          error={errors.batches?.[index]?.unitPrice?.message}
+                        />
+                      )}
                     />
                   </div>
                 </div>

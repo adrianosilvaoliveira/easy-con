@@ -5,9 +5,12 @@ import { MovementType } from '@prisma/client';
 const emptyToUndefined = (value: unknown) =>
   value === '' || value === null ? undefined : value;
 
+/** Máximo para valor unitário (R$ 100.000,00). */
+const MAX_UNIT_PRICE = 100_000;
+
 const optionalPositiveNumber = z.preprocess(
   emptyToUndefined,
-  z.coerce.number().positive().optional()
+  z.coerce.number().positive().max(MAX_UNIT_PRICE, 'Máximo R$ 100.000,00').optional()
 );
 
 const optionalUuid = z.preprocess(emptyToUndefined, z.string().uuid().optional());

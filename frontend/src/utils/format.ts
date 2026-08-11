@@ -18,6 +18,21 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+/** Máximo padrão para valor unitário em entradas (R$ 100.000,00). */
+export const MAX_UNIT_PRICE = 100_000;
+
+/** Formata centavos digitados como moeda BRL (ex.: 12345 → R$ 123,45). */
+export function formatCurrencyInput(cents: number): string {
+  return formatCurrency(cents / 100);
+}
+
+/** Extrai dígitos e converte para valor em reais (centavos / 100). */
+export function parseCurrencyInput(raw: string): number | undefined {
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return undefined;
+  return Number(digits) / 100;
+}
+
 export function formatProductName(name: string): string {
   return name.trim().toLocaleUpperCase('pt-BR');
 }
