@@ -13,6 +13,15 @@ export class MovementController {
     res.status(201).json({ success: true, data: result });
   }
 
+  static async createKitAssembly(req: Request, res: Response): Promise<void> {
+    const result = await MovementService.createKitAssembly(
+      req.body,
+      req.user!.id,
+      req.user!.roleName
+    );
+    res.status(201).json({ success: true, data: result });
+  }
+
   static async createTransfer(req: Request, res: Response): Promise<void> {
     const result = await MovementService.createTransfer(req.body, req.user!.id, req.user!.roleName);
     res.status(201).json({ success: true, data: result });

@@ -101,7 +101,7 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
           {
             key: 'stock',
             header: 'Estoque',
-            render: (p) => (p.productType === 'KIT' ? '—' : p.totalStock ?? 0),
+            render: (p) => p.totalStock ?? 0,
           },
           {
             key: 'status',
@@ -117,7 +117,11 @@ export function ProductCatalogPanel({ allowCreate = false, allowEdit = true }: P
             header: 'Alerta',
             render: (p) =>
               p.productType === 'KIT' ? (
-                <Badge variant="info">Kit</Badge>
+                (p.totalStock ?? 0) > 0 ? (
+                  <Badge variant="success">Montado</Badge>
+                ) : (
+                  <Badge variant="info">Sem estoque</Badge>
+                )
               ) : (p.totalStock ?? 0) < p.minQuantity ? (
                 <Badge variant="danger">Abaixo do mínimo</Badge>
               ) : (

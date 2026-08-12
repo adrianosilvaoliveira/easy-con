@@ -29,8 +29,10 @@ interface ProductSearchSelectProps {
   required?: boolean;
   disabled?: boolean;
   allowCreate?: boolean;
-  /** Oculta kits da busca (entradas/saídas/componentes de kit) */
+  /** Oculta kits da busca (entradas/componentes de kit) */
   excludeKits?: boolean;
+  /** Filtra por tipo (ex.: só kits na montagem) */
+  productType?: ProductType;
 }
 
 function normalize(text: string) {
@@ -64,6 +66,7 @@ export function ProductSearchSelect({
   disabled,
   allowCreate = true,
   excludeKits = false,
+  productType,
 }: ProductSearchSelectProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -73,7 +76,7 @@ export function ProductSearchSelect({
   const debouncedQuery = useDebounce(query, 300);
 
   const { data: products = [], isFetching } = useQuery({
-    queryKey: ['products-search', debouncedQuery, excludeKits],
+    queryKey: ['products-search', debouncedQuery, excludeKits, productType],
     queryFn: () =>
       api
         .get('/products', {
@@ -81,6 +84,7 @@ export function ProductSearchSelect({
             search: debouncedQuery.trim() || undefined,
             limit: 40,
             excludeKits: excludeKits ? 'true' : undefined,
+            productType: productType || undefined,
           },
         })
         .then((r) => r.data.data as ProductOption[]),

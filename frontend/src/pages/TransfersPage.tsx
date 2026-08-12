@@ -206,7 +206,6 @@ export function TransfersPage() {
                   }}
                   error={errors.productId?.message}
                   required
-                  excludeKits
                 />
               )}
             />

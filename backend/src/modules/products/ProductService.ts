@@ -51,7 +51,7 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
   const componentIds = items.map((i) => i.componentProductId);
   const batchIds = items.map((i) => i.batchId).filter((id): id is string => Boolean(id));
 
-  const [components, batches, batchCounts] = await Promise.all([
+  const [components, batches] = await Promise.all([
     prisma.product.findMany({
       where: { id: { in: componentIds } },
       select: { id: true, name: true, productType: true, active: true },
@@ -62,16 +62,10 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
           select: { id: true, productId: true },
         })
       : Promise.resolve([] as { id: string; productId: string }[]),
-    prisma.productBatch.groupBy({
-      by: ['productId'],
-      where: { productId: { in: componentIds } },
-      _count: { _all: true },
-    }),
   ]);
 
   const componentMap = new Map(components.map((c) => [c.id, c]));
   const batchMap = new Map(batches.map((b) => [b.id, b]));
-  const batchCountMap = new Map(batchCounts.map((b) => [b.productId, b._count._all]));
 
   for (const item of items) {
     const key = `${item.componentProductId}:${item.batchId ?? 'none'}`;
@@ -86,14 +80,6 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
     }
     if (component.productType === 'KIT') {
       throw new ValidationError(`"${component.name}" é um kit e não pode compor outro kit`);
-    }
-
-    const hasLots = (batchCountMap.get(item.componentProductId) ?? 0) > 0;
-
-    if (hasLots && !item.batchId) {
-      throw new ValidationError(
-        `Selecione o lote de "${component.name}" — este produto possui lotes cadastrados`
-      );
     }
 
     if (item.batchId) {

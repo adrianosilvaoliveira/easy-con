@@ -3,11 +3,12 @@ import { prisma } from '../../database/prisma';
 import { NotFoundError, ValidationError } from '../../shared/errors/AppError';
 import { parsePagination, buildPaginatedResult } from '../../shared/utils/pagination';
 import { z } from 'zod';
-import { entrySchema, exitSchema, transferSchema } from './movements.dto';
+import { entrySchema, exitSchema, kitAssemblySchema, transferSchema } from './movements.dto';
 import { BatchService } from '../batches/BatchService';
 import { calculateExpirationStatus } from '../../shared/utils/expiration';
 type EntryDTO = z.infer<typeof entrySchema>;
 type ExitDTO = z.infer<typeof exitSchema>;
+type KitAssemblyDTO = z.infer<typeof kitAssemblySchema>;
 type TransferDTO = z.infer<typeof transferSchema>;
 type PendingEntryMetadata = {
   kind: 'ENTRY';
@@ -15,6 +16,13 @@ type PendingEntryMetadata = {
   expirationDate: string;
   manufacturingDate: string;
   unitPrice?: number;
+};
+type PendingKitAssemblyMetadata = {
+  kind: 'KIT_ASSEMBLY';
+  batchNumber: string;
+  expirationDate: string;
+  manufacturingDate: string;
+  components: NonNullable<KitAssemblyDTO['components']>;
 };
 const ENTRY_TYPES: MovementType[] = [
   'ENTRADA_COMPRA',
@@ -393,6 +401,11 @@ export class MovementService {
   private static async createPendingEntry(data: EntryDTO, userId: string) {
     const product = await prisma.product.findUnique({ where: { id: data.productId } });
     if (!product) throw new NotFoundError('Produto não encontrado');
+    if (product.productType === 'KIT') {
+      throw new ValidationError(
+        'Kits não recebem entrada direta — use Montagem de kit para gerar o estoque'
+      );
+    }
     const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
     const movements = [];
     for (const line of data.batches) {
@@ -436,6 +449,11 @@ export class MovementService {
   private static async executeEntry(data: EntryDTO, userId: string) {
     const product = await prisma.product.findUnique({ where: { id: data.productId } });
     if (!product) throw new NotFoundError('Produto não encontrado');
+    if (product.productType === 'KIT') {
+      throw new ValidationError(
+        'Kits não recebem entrada direta — use Montagem de kit para gerar o estoque'
+      );
+    }
     const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
     try {
       const movements = await prisma.$transaction(async (tx) => {
@@ -505,47 +523,199 @@ export class MovementService {
       throw e;
     }
   }
+
+  static async createKitAssembly(data: KitAssemblyDTO, userId: string, roleName?: RoleName) {
+    const kit = await prisma.product.findUnique({ where: { id: data.kitProductId } });
+    if (!kit) throw new NotFoundError('Kit não encontrado');
+    if (kit.productType !== 'KIT') {
+      throw new ValidationError('O produto selecionado não é um kit');
+    }
+    if (!kit.active) {
+      throw new ValidationError('Kit inativo');
+    }
+
+    const plan = await this.planKitComponentExit(
+      data.kitProductId,
+      data.destinationLocationId,
+      data.quantity,
+      'SAIDA_CONSUMO',
+      data.components
+    );
+
+    if (this.requiresApproval(roleName)) {
+      const manufacturingDate =
+        data.manufacturingDate?.trim() || new Date().toISOString().slice(0, 10);
+      const metadata: PendingKitAssemblyMetadata = {
+        kind: 'KIT_ASSEMBLY',
+        batchNumber: data.batchNumber.trim(),
+        expirationDate: data.expirationDate,
+        manufacturingDate,
+        components: data.components,
+      };
+      const movement = await prisma.stockMovement.create({
+        data: {
+          type: 'ENTRADA_MANUAL',
+          status: 'PENDENTE',
+          productId: data.kitProductId,
+          quantity: data.quantity,
+          destinationLocationId: data.destinationLocationId,
+          reason: data.reason || 'Montagem de kit',
+          notes: data.notes,
+          movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+          userId,
+          metadata,
+        },
+        include: movementInclude,
+      });
+      return { ...movement, pendingApproval: true };
+    }
+
+    return this.executeKitAssembly(data, userId, plan);
+  }
+
+  private static async executeKitAssembly(
+    data: KitAssemblyDTO,
+    userId: string,
+    plan: Awaited<ReturnType<typeof MovementService.planKitComponentExit>>,
+    options?: { pendingMovementId?: string; approverId?: string }
+  ) {
+    const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
+    const manufacturingDate = data.manufacturingDate?.trim()
+      ? new Date(data.manufacturingDate)
+      : new Date();
+    const expirationDate = new Date(data.expirationDate);
+    const reason = data.reason?.trim() || 'Montagem de kit';
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        for (const slice of plan) {
+          await this.updateStockInTx(
+            tx,
+            slice.componentProductId,
+            data.destinationLocationId,
+            slice.batchId,
+            -slice.quantity
+          );
+          if (slice.batchId) {
+            await BatchService.syncBatchQuantity(slice.batchId, tx);
+          }
+        }
+
+        const kitBatch = await BatchService.findOrCreateForEntry(tx, {
+          productId: data.kitProductId,
+          stockLocationId: data.destinationLocationId,
+          batchNumber: data.batchNumber.trim(),
+          expirationDate,
+          manufacturingDate,
+          quantity: data.quantity,
+          userId,
+        });
+
+        let header;
+        if (options?.pendingMovementId) {
+          header = await tx.stockMovement.update({
+            where: { id: options.pendingMovementId },
+            data: {
+              status: 'CONCLUIDA',
+              batchId: kitBatch.id,
+              approvedById: options.approverId,
+              approvedAt: new Date(),
+              notes: data.notes,
+              metadata: {
+                kind: 'KIT_ASSEMBLY',
+                componentCount: plan.length,
+              },
+            },
+            include: movementInclude,
+          });
+        } else {
+          header = await tx.stockMovement.create({
+            data: {
+              type: 'ENTRADA_MANUAL',
+              status: 'CONCLUIDA',
+              productId: data.kitProductId,
+              batchId: kitBatch.id,
+              quantity: data.quantity,
+              destinationLocationId: data.destinationLocationId,
+              reason,
+              notes: data.notes,
+              movementDate,
+              userId,
+              metadata: {
+                kind: 'KIT_ASSEMBLY',
+                componentCount: plan.length,
+              },
+            },
+            include: movementInclude,
+          });
+        }
+
+        await this.updateStockInTx(
+          tx,
+          data.kitProductId,
+          data.destinationLocationId,
+          kitBatch.id,
+          data.quantity
+        );
+        await BatchService.syncBatchQuantity(kitBatch.id, tx);
+
+        const componentMovements = [];
+        for (const slice of plan) {
+          const mov = await tx.stockMovement.create({
+            data: {
+              type: 'SAIDA_CONSUMO',
+              status: 'CONCLUIDA',
+              productId: slice.componentProductId,
+              batchId: slice.batchId,
+              quantity: slice.quantity,
+              originLocationId: data.destinationLocationId,
+              reason: `${reason} — componente`,
+              notes: data.notes
+                ? `${data.notes} | kitAssemblyId=${header.id}`
+                : `kitAssemblyId=${header.id}`,
+              movementDate,
+              userId,
+              approvedById: options?.approverId,
+              approvedAt: options?.approverId ? new Date() : undefined,
+              metadata: {
+                kind: 'KIT_ASSEMBLY_COMPONENT',
+                kitProductId: data.kitProductId,
+                kitAssemblyId: header.id,
+              },
+            },
+            include: movementInclude,
+          });
+          componentMovements.push(mov);
+        }
+
+        return { header, kitBatchId: kitBatch.id, componentMovements };
+      });
+
+      await BatchService.syncBatchAlerts(result.kitBatchId);
+      for (const slice of plan) {
+        if (slice.batchId) {
+          await BatchService.syncBatchAlerts(slice.batchId);
+        }
+      }
+
+      return {
+        ...result.header,
+        kitComponents: result.componentMovements,
+      };
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('validade')) {
+        throw new ValidationError(e.message);
+      }
+      throw e;
+    }
+  }
+
   static async createExit(data: ExitDTO, userId: string, roleName?: RoleName) {
     const product = await prisma.product.findUnique({ where: { id: data.productId } });
     if (!product) throw new NotFoundError('Produto não encontrado');
 
-    if (product.productType === 'KIT') {
-      if (data.batchId) {
-        throw new ValidationError(
-          'Saída de kit não utiliza lote do kit — a baixa é nos componentes'
-        );
-      }
-      const plan = await this.planKitComponentExit(
-        data.productId,
-        data.originLocationId,
-        data.quantity,
-        data.type,
-        data.kitComponents
-      );
-      if (this.requiresApproval(roleName)) {
-        const movement = await prisma.stockMovement.create({
-          data: {
-            type: data.type,
-            status: 'PENDENTE',
-            productId: data.productId,
-            quantity: data.quantity,
-            originLocationId: data.originLocationId,
-            reason: data.reason,
-            notes: data.notes,
-            movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
-            userId,
-            metadata: {
-              kind: 'KIT_EXIT',
-              kitComponents: data.kitComponents ?? null,
-            },
-          },
-          include: movementInclude,
-        });
-        return { ...movement, pendingApproval: true };
-      }
-      return this.executeKitExit(data, userId, plan);
-    }
-
+    // Kit montado: baixa o estoque/lote do kit (mesmo fluxo de produto acabado).
+    // Pendências antigas com metadata KIT_EXIT ainda são aprovadas via approveExit.
     await this.assertExitStockAvailable(data);
     if (this.requiresApproval(roleName)) {
       return this.createPendingExit(data, userId);
@@ -800,7 +970,40 @@ export class MovementService {
     if (!approved) {
       return this.rejectMovement(movement.id, approverId, notes, movement.notes);
     }
-    const meta = movement.metadata as PendingEntryMetadata | null;
+    const rawMeta = movement.metadata as
+      | PendingEntryMetadata
+      | PendingKitAssemblyMetadata
+      | null;
+
+    if (rawMeta?.kind === 'KIT_ASSEMBLY') {
+      if (!movement.destinationLocationId) {
+        throw new ValidationError('Local da montagem pendente inválido');
+      }
+      const data: KitAssemblyDTO = {
+        kitProductId: movement.productId,
+        destinationLocationId: movement.destinationLocationId,
+        quantity: movement.quantity,
+        batchNumber: rawMeta.batchNumber,
+        expirationDate: rawMeta.expirationDate,
+        manufacturingDate: rawMeta.manufacturingDate,
+        reason: movement.reason ?? undefined,
+        notes: notes || movement.notes || undefined,
+        components: rawMeta.components,
+      };
+      const plan = await this.planKitComponentExit(
+        data.kitProductId,
+        data.destinationLocationId,
+        data.quantity,
+        'SAIDA_CONSUMO',
+        data.components
+      );
+      return this.executeKitAssembly(data, movement.userId, plan, {
+        pendingMovementId: movement.id,
+        approverId,
+      });
+    }
+
+    const meta = rawMeta as PendingEntryMetadata | null;
     if (!meta || meta.kind !== 'ENTRY' || !movement.destinationLocationId) {
       throw new ValidationError('Dados da entrada pendente inválidos');
     }
@@ -861,14 +1064,14 @@ export class MovementService {
       throw new ValidationError('Origem da saída não informada');
     }
 
-    const product = await prisma.product.findUnique({ where: { id: movement.productId } });
     const meta = movement.metadata as {
       kind?: string;
       kitComponents?: NonNullable<ExitDTO['kitComponents']>;
     } | null;
-    const isKitExit = product?.productType === 'KIT' || meta?.kind === 'KIT_EXIT';
+    // Apenas saídas antigas (baixa por componentes) — kits montados usam o fluxo normal com lote.
+    const isLegacyKitExit = meta?.kind === 'KIT_EXIT';
 
-    if (isKitExit) {
+    if (isLegacyKitExit) {
       const exitData: ExitDTO = {
         type: movement.type as ExitDTO['type'],
         productId: movement.productId,

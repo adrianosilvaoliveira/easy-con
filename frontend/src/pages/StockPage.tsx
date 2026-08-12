@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Boxes, MapPin, Search, X, Plus, ChevronLeft, ChevronRight, Printer, Package } from 'lucide-react';
+import { Boxes, MapPin, Search, X, Plus, ChevronLeft, ChevronRight, Printer, Package, Wrench } from 'lucide-react';
 import api from '@/services/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -10,6 +10,7 @@ import { ProductFormModal } from '@/components/products/ProductFormModal';
 import { PrintLabelsModal } from '@/components/products/PrintLabelsModal';
 import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { KitBadge, kitRowClassName } from '@/components/products/ProductTypeSelect';
+import { KitAssemblyModal } from '@/components/movements/KitAssemblyModal';
 import type { Product, StockItem } from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/utils/cn';
@@ -27,6 +28,7 @@ export function StockPage() {
   const canCreateProduct = useAuthStore((s) => s.hasPermission('products:CREATE'));
   const canEditProduct = useAuthStore((s) => s.hasPermission('products:UPDATE'));
   const canReadStock = useAuthStore((s) => s.hasPermission('stock:READ'));
+  const canAssembleKit = useAuthStore((s) => s.hasPermission('movements:CREATE'));
 
   const [search, setSearch] = useState('');
   const [locationId, setLocationId] = useState('');
@@ -38,6 +40,8 @@ export function StockPage() {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [labelsModalOpen, setLabelsModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assemblyOpen, setAssemblyOpen] = useState(false);
+  const [assemblyKitId, setAssemblyKitId] = useState<string | null>(null);
 
   const PAGE_SIZE = 100;
 
@@ -183,6 +187,18 @@ export function StockPage() {
                 className="w-full sm:w-auto"
               >
                 <Printer className="h-4 w-4" /> Imprimir etiquetas
+              </Button>
+            )}
+            {canAssembleKit && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setAssemblyKitId(null);
+                  setAssemblyOpen(true);
+                }}
+                className="w-full sm:w-auto"
+              >
+                <Wrench className="h-4 w-4" /> Montar kit
               </Button>
             )}
             {canCreateProduct && (
@@ -474,7 +490,33 @@ export function StockPage() {
               header: 'Itens',
               render: (k) => k.kitItems?.length ?? 0,
             },
+            {
+              key: 'stock',
+              header: 'Estoque',
+              render: (k) => k.totalStock ?? 0,
+            },
             { key: 'category', header: 'Categoria', render: (k) => k.category?.name || '—' },
+            ...(canAssembleKit
+              ? [
+                  {
+                    key: 'assemble',
+                    header: '',
+                    render: (k: Product) => (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAssemblyKitId(k.id);
+                          setAssemblyOpen(true);
+                        }}
+                      >
+                        <Wrench className="h-4 w-4" /> Montar
+                      </Button>
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       )}
@@ -519,6 +561,18 @@ export function StockPage() {
         onClose={() => setLabelsModalOpen(false)}
         preselected={preselectedLabels}
       />
+
+      {canAssembleKit && (
+        <KitAssemblyModal
+          open={assemblyOpen}
+          onClose={() => {
+            setAssemblyOpen(false);
+            setAssemblyKitId(null);
+          }}
+          initialKitId={assemblyKitId}
+          onSuccess={handleProductSaved}
+        />
+      )}
     </div>
   );
 }

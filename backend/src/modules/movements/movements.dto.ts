@@ -77,7 +77,7 @@ export const exitSchema = baseMovement.extend({
     'SAIDA_VENCIMENTO',
   ]),
   originLocationId: z.string().uuid(),
-  /** Composição editada na saída do kit (quantidade total a baixar por componente). */
+  /** @deprecated Saída de kit agora baixa o lote do kit montado; mantido só para pendências antigas. */
   kitComponents: z
     .array(
       z.object({
@@ -89,6 +89,29 @@ export const exitSchema = baseMovement.extend({
     .min(1, 'Informe ao menos um produto na saída do kit')
     .max(50)
     .optional(),
+});
+
+/** Montagem: baixa componentes e gera estoque/lote do kit acabado. */
+export const kitAssemblySchema = z.object({
+  kitProductId: z.string().uuid(),
+  destinationLocationId: z.string().uuid(),
+  quantity: z.coerce.number().int().positive(),
+  batchNumber: z.string().min(1, 'Número do lote do kit obrigatório'),
+  expirationDate: z.string().min(1, 'Data de validade obrigatória'),
+  manufacturingDate: z.string().optional(),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+  movementDate: z.string().datetime().optional(),
+  components: z
+    .array(
+      z.object({
+        componentProductId: z.string().uuid(),
+        quantity: z.coerce.number().int().positive(),
+        batchId: optionalUuid,
+      })
+    )
+    .min(1, 'Informe os componentes da montagem')
+    .max(50),
 });
 
 export const transferSchema = baseMovement.extend({

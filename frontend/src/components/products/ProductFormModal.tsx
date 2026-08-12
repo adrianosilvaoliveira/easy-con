@@ -228,10 +228,6 @@ export function ProductFormModal({
         setKitItemsError('Informe a quantidade de cada item');
         return false;
       }
-      if (item.requiresBatch && !item.batchId) {
-        setKitItemsError('Selecione o lote de todos os produtos que possuem lotes');
-        return false;
-      }
     }
     setKitItemsError('');
     return true;
@@ -469,7 +465,12 @@ export function ProductFormModal({
             )}
 
             {isKit && (
-              <KitItemsEditor items={kitItems} onChange={setKitItems} errors={kitItemsError} />
+              <>
+                <KitItemsEditor items={kitItems} onChange={setKitItems} errors={kitItemsError} />
+                <p className="sm:col-span-2 text-xs text-slate-500">
+                  O cadastro define a receita. Para gerar estoque do kit, use Estoque → Montar kit.
+                </p>
+              </>
             )}
 
             <div className="sm:col-span-2">

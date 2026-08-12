@@ -6,6 +6,7 @@ import { asyncHandler } from '../middlewares/asyncHandler';
 import {
   entrySchema,
   exitSchema,
+  kitAssemblySchema,
   transferSchema,
   approveMovementSchema,
 } from '../modules/movements/movements.dto';
@@ -23,6 +24,13 @@ movementRoutes.post(
   validate(entrySchema),
   auditAction('CREATE_ENTRY', 'movements'),
   asyncHandler(MovementController.createEntry)
+);
+movementRoutes.post(
+  '/kit-assemblies',
+  authorize('movements:CREATE'),
+  validate(kitAssemblySchema),
+  auditAction('CREATE_KIT_ASSEMBLY', 'movements'),
+  asyncHandler(MovementController.createKitAssembly)
 );
 movementRoutes.post(
   '/exits',
