@@ -159,6 +159,7 @@ export function StockPage() {
           barcode: p.barcode,
           internalCode: p.internalCode,
           isKit: p.productType === 'KIT',
+          productId: p.id,
         });
       }
       return Array.from(byProduct.values());
@@ -171,6 +172,7 @@ export function StockPage() {
         barcode: k.barcode!,
         internalCode: k.internalCode,
         isKit: true,
+        productId: k.id,
       }));
   }, [viewMode, items?.data, kits?.data, selectedIds]);
 

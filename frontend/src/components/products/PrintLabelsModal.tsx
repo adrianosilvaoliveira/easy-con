@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useDebounce } from '@/hooks/useDebounce';
 import { formatProductName } from '@/utils/format';
-import { printBarcodeLabels, type LabelItem } from '@/utils/printBarcodeLabels';
+import { printBarcodeLabels, type KitContentLine, type LabelItem } from '@/utils/printBarcodeLabels';
 import { KitBadge, kitRowClassName } from '@/components/products/ProductTypeSelect';
 import { cn } from '@/utils/cn';
 import type { Product } from '@/types';
@@ -21,9 +21,69 @@ interface PrintLabelsModalProps {
   preselected?: LabelItem[];
 }
 
-function itemKey(item: Pick<LabelItem, 'barcode' | 'internalCode'>, id?: string) {
+function itemKey(item: Pick<LabelItem, 'barcode' | 'internalCode' | 'productId'>, id?: string) {
   if (id) return id;
+  if (item.productId) return item.productId;
   return `${item.internalCode ?? ''}|${item.barcode}`;
+}
+
+function kitContentsFromProduct(product: Product): KitContentLine[] {
+  const byProduct = new Map<string, KitContentLine>();
+  for (const ki of product.kitItems ?? []) {
+    const component = ki.componentProduct;
+    if (!component?.name) continue;
+    const id = ki.componentProductId || component.id;
+    const prev = byProduct.get(id);
+    if (prev) {
+      prev.quantity += ki.quantity;
+    } else {
+      byProduct.set(id, {
+        name: component.name,
+        quantity: ki.quantity,
+        internalCode: component.internalCode,
+      });
+    }
+  }
+  return Array.from(byProduct.values());
+}
+
+async function enrichKitLabels(items: LabelItem[]): Promise<LabelItem[]> {
+  const ids = [
+    ...new Set(
+      items
+        .filter((item) => item.isKit && !item.kitContents?.length && item.productId)
+        .map((item) => item.productId as string)
+    ),
+  ];
+  if (!ids.length) return items;
+
+  const results = await Promise.allSettled(
+    ids.map((id) => api.get(`/products/${id}`).then((r) => r.data.data as Product))
+  );
+
+  const contentsById = new Map<string, KitContentLine[]>();
+  let failed = 0;
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      contentsById.set(ids[index], kitContentsFromProduct(result.value));
+    } else {
+      failed += 1;
+    }
+  });
+
+  if (failed > 0) {
+    toast.error(
+      failed === 1
+        ? 'Não foi possível carregar os itens de um kit. A etiqueta sairá sem a relação de produtos.'
+        : `Não foi possível carregar os itens de ${failed} kits. Essas etiquetas sairão sem a relação de produtos.`
+    );
+  }
+
+  return items.map((item) => {
+    if (!item.isKit || item.kitContents?.length || !item.productId) return item;
+    const contents = contentsById.get(item.productId);
+    return contents ? { ...item, kitContents: contents } : item;
+  });
 }
 
 export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabelsModalProps) {
@@ -106,6 +166,8 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
         barcode: product.barcode!,
         internalCode: product.internalCode,
         isKit: product.productType === 'KIT',
+        productId: product.id,
+        kitContents: kitContentsFromProduct(product),
         quantity: 1,
       });
       return next;
@@ -134,17 +196,33 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
 
   const clearList = () => setSelected(new Map());
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const items = Array.from(selected.values());
     if (!items.length) {
       toast.error('Adicione ao menos um item à lista de impressão');
       return;
     }
+
+    const hasKitsToLoad = items.some((item) => item.isKit && !item.kitContents?.length && item.productId);
+    // Abrir no clique para não ser bloqueado pelo pop-up após o await.
+    const win = window.open('', '_blank', 'width=800,height=600');
+    if (!win) {
+      toast.error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.');
+      return;
+    }
+    if (hasKitsToLoad) {
+      win.document.write(
+        '<p style="font-family:system-ui,sans-serif;padding:24px;color:#334155">Carregando conteúdo dos kits...</p>'
+      );
+    }
+
     setPrinting(true);
     try {
-      printBarcodeLabels(items);
+      const resolved = hasKitsToLoad ? await enrichKitLabels(items) : items;
+      printBarcodeLabels(resolved, win);
       onClose();
     } catch (err) {
+      win.close();
       toast.error(err instanceof Error ? err.message : 'Erro ao imprimir etiquetas');
     } finally {
       setPrinting(false);
@@ -178,7 +256,7 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
       <div className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Monte a lista buscando e adicionando vários produtos ou kits. Depois defina a quantidade
-          de cada etiqueta.
+          de cada etiqueta. Em kits, a etiqueta inclui a relação discriminada dos produtos.
         </p>
 
         <div className="space-y-2">
@@ -217,6 +295,9 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
                     </span>
                     <span className="block font-mono text-xs text-slate-500">
                       {item.internalCode} · {item.barcode}
+                      {item.isKit && item.kitContents && item.kitContents.length > 0
+                        ? ` · ${item.kitContents.length} produto(s) na etiqueta`
+                        : ''}
                     </span>
                   </span>
                   <label className="flex shrink-0 items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">

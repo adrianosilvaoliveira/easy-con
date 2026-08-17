@@ -2,11 +2,21 @@
  * Imprime etiquetas com código de barras via janela do navegador.
  * Gera SVG Code128 localmente (sem chunk/CDN) para evitar falha de import no Vercel.
  */
+export type KitContentLine = {
+  name: string;
+  quantity: number;
+  internalCode?: string;
+};
+
 export type LabelItem = {
   name: string;
   barcode: string;
   internalCode?: string;
   isKit?: boolean;
+  /** ID do produto/kit — usado para carregar o conteúdo na impressão. */
+  productId?: string;
+  /** Relação de produtos do kit (nome + quantidade). */
+  kitContents?: KitContentLine[];
   /** Quantidade de cópias da etiqueta (padrão 1). */
   quantity?: number;
 };
@@ -74,9 +84,28 @@ export function code128Svg(text: string, barWidth = 1.5, height = 40): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(text)}">${rects.join('')}</svg>`;
 }
 
-export function printBarcodeLabels(items: LabelItem[]) {
+function formatLabelName(name: string) {
+  return escapeHtml(name.trim().toLocaleUpperCase('pt-BR'));
+}
+
+function kitContentsHtml(contents: KitContentLine[] | undefined) {
+  if (!contents?.length) return '';
+  const rows = contents
+    .map((line) => {
+      const qty = Number.isFinite(line.quantity) && line.quantity > 0 ? line.quantity : 1;
+      return `<li><span class="qty">${qty}×</span><span class="item-name">${formatLabelName(line.name)}</span></li>`;
+    })
+    .join('');
+  return `<div class="contents">
+    <div class="contents-title">Conteúdo do kit</div>
+    <ul>${rows}</ul>
+  </div>`;
+}
+
+export function printBarcodeLabels(items: LabelItem[], targetWindow?: Window) {
   const valid = items.filter((i) => i.barcode?.trim());
   if (!valid.length) {
+    targetWindow?.close();
     throw new Error('Nenhum item com código de barras para imprimir');
   }
 
@@ -85,8 +114,8 @@ export function printBarcodeLabels(items: LabelItem[]) {
     return Array.from({ length: qty }, () => item);
   });
 
-  // Abrir no mesmo tick do clique (sem await / import dinâmico).
-  const win = window.open('', '_blank', 'width=800,height=600');
+  // Abrir no mesmo tick do clique (sem await / import dinâmico), salvo janela já aberta.
+  const win = targetWindow ?? window.open('', '_blank', 'width=800,height=600');
   if (!win) {
     throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.');
   }
@@ -99,12 +128,15 @@ export function printBarcodeLabels(items: LabelItem[]) {
       } catch {
         barcodeSvg = `<div class="barcode-error">Código inválido</div>`;
       }
+      const isKit = Boolean(item.isKit);
+      const hasContents = isKit && Boolean(item.kitContents?.length);
       return `
-      <div class="label">
-        <div class="name">${escapeHtml(item.name)}${item.isKit ? ' <span class="kit">KIT</span>' : ''}</div>
+      <div class="label${isKit ? ' label-kit' : ''}${hasContents ? ' label-kit-contents' : ''}">
+        <div class="name">${formatLabelName(item.name)}${isKit ? ' <span class="kit">KIT</span>' : ''}</div>
         ${item.internalCode ? `<div class="code">${escapeHtml(item.internalCode)}</div>` : ''}
         <div class="barcode">${barcodeSvg}</div>
         <div class="barcode-text">${escapeHtml(item.barcode)}</div>
+        ${kitContentsHtml(item.kitContents)}
       </div>`;
     })
     .join('');
@@ -140,6 +172,11 @@ export function printBarcodeLabels(items: LabelItem[]) {
       justify-content: center;
       page-break-inside: avoid;
     }
+    .label-kit-contents {
+      width: 90mm;
+      align-items: stretch;
+      justify-content: flex-start;
+    }
     .name {
       font-size: 10px;
       font-weight: 600;
@@ -151,6 +188,10 @@ export function printBarcodeLabels(items: LabelItem[]) {
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
     }
+    .label-kit-contents .name {
+      text-align: left;
+      -webkit-line-clamp: 3;
+    }
     .kit { color: #0f766e; font-size: 9px; }
     .code {
       font-size: 9px;
@@ -158,6 +199,41 @@ export function printBarcodeLabels(items: LabelItem[]) {
       margin-top: 1mm;
       font-family: ui-monospace, monospace;
     }
+    .label-kit-contents .code { text-align: left; }
+    .contents {
+      margin-top: 2.5mm;
+      width: 100%;
+      border-top: 0.4pt solid #cbd5e1;
+      padding-top: 1.5mm;
+      text-align: left;
+    }
+    .contents-title {
+      font-size: 7px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      margin-bottom: 1mm;
+    }
+    .contents ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .contents li {
+      font-size: 8px;
+      line-height: 1.35;
+      display: flex;
+      gap: 1.5mm;
+      break-inside: avoid;
+    }
+    .contents .qty {
+      font-weight: 700;
+      font-family: ui-monospace, monospace;
+      flex-shrink: 0;
+      min-width: 7mm;
+    }
+    .contents .item-name { min-width: 0; }
     .barcode {
       margin-top: 2mm;
       max-width: 100%;
@@ -165,6 +241,7 @@ export function printBarcodeLabels(items: LabelItem[]) {
       display: flex;
       justify-content: center;
     }
+    .label-kit-contents .barcode { justify-content: flex-start; }
     .barcode svg { max-width: 100%; height: auto; }
     .barcode-text {
       font-size: 11px;
@@ -172,6 +249,7 @@ export function printBarcodeLabels(items: LabelItem[]) {
       font-family: ui-monospace, monospace;
       margin-top: 1mm;
     }
+    .label-kit-contents .barcode-text { text-align: left; }
     .barcode-error { color: #b91c1c; font-size: 10px; }
     @media print {
       body { padding: 0; }
