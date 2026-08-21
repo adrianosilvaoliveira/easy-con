@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import { SupplierSearchSelect } from '@/components/suppliers/SupplierSearchSelect';
+import type { Product } from '@/types';
 
 export interface ExpirationReportFilterValues {
   productId?: string;
@@ -27,9 +28,10 @@ interface Props {
 export function ExpirationReportFilters({ values, onChange, showDateRange }: Props) {
   const { data: products } = useQuery({
     queryKey: ['report-products'],
-    queryFn: () => api.get('/products', { params: { limit: 300 } }).then((r) =>
-      (r.data.data as { id: string; name: string; active?: boolean }[]).filter((p) => p.active !== false)
-    ),
+    queryFn: () =>
+      api
+        .get('/products', { params: { limit: 300 } })
+        .then((r) => (r.data.data as Product[]).filter((p) => p.active !== false)),
   });
 
   const { data: categories } = useQuery({
@@ -55,7 +57,7 @@ export function ExpirationReportFilters({ values, onChange, showDateRange }: Pro
           onChange={(e) => set({ productId: e.target.value || undefined })}
         >
           <option value="">Todos</option>
-          {products?.map((p: { id: string; name: string; internalCode: string }) => (
+          {products?.map((p) => (
             <option key={p.id} value={p.id}>
               {p.internalCode} — {p.name}
             </option>
