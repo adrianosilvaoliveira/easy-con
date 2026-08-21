@@ -1,5 +1,5 @@
 import './shared/types/express';
 import { createApp } from './createApp';
 
-/** Só o bundle da Vercel usa este arquivo (scripts/bundle-vercel.cjs). */
+/** Entrypoint para Vercel (@vercel/backends / Express). */
 export default createApp();
