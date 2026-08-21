@@ -14,10 +14,10 @@ buildSync({
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  outfile: 'dist/vercel.cjs',
+  outfile: 'vercel-lambda.cjs',
   sourcemap: false,
   external: ['@prisma/client'],
   logLevel: 'info',
 });
 
-console.log('[bundle-vercel] wrote dist/vercel.cjs');
+console.log('[bundle-vercel] wrote vercel-lambda.cjs');
