@@ -7,7 +7,7 @@
       "framework": "vite"
     },
     "backend": {
-      "entrypoint": "backend/src/index.mts",
+      "entrypoint": "backend/src/index.cts",
       "routePrefix": "/_/backend",
       "framework": "express"
     }
