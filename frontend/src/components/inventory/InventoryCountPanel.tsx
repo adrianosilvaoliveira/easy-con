@@ -14,6 +14,7 @@ interface CatalogProduct {
   name: string;
   internalCode: string;
   barcode?: string | null;
+  active?: boolean;
 }
 
 interface InventoryItemRow {
@@ -112,11 +113,10 @@ export function InventoryCountPanel({ inventoryId, onBack, onCompleted }: Invent
           params: {
             search: searchTrim,
             limit: 50,
-            active: true,
             excludeKits: 'true',
           },
         })
-        .then((r) => r.data.data as CatalogProduct[]),
+        .then((r) => (r.data.data as CatalogProduct[]).filter((p) => p.active !== false)),
     enabled: searchTrim.length >= 2 && inventory?.status === 'EM_ANDAMENTO',
   });
 

@@ -27,7 +27,9 @@ interface Props {
 export function ExpirationReportFilters({ values, onChange, showDateRange }: Props) {
   const { data: products } = useQuery({
     queryKey: ['report-products'],
-    queryFn: () => api.get('/products', { params: { limit: 300 } }).then((r) => r.data.data),
+    queryFn: () => api.get('/products', { params: { limit: 300 } }).then((r) =>
+      (r.data.data as { id: string; name: string; active?: boolean }[]).filter((p) => p.active !== false)
+    ),
   });
 
   const { data: categories } = useQuery({

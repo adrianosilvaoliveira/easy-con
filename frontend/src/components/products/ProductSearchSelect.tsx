@@ -19,6 +19,7 @@ export interface ProductOption {
   internalCode: string;
   barcode?: string | null;
   productType?: ProductType;
+  active?: boolean;
 }
 
 interface ProductSearchSelectProps {
@@ -87,9 +88,11 @@ export function ProductSearchSelect({
             productType: productType || undefined,
           },
         })
-        .then((r) => r.data.data as ProductOption[]),
+        .then((r) =>
+          (r.data.data as ProductOption[]).filter((p) => p.active !== false)
+        ),
     enabled: open || !!debouncedQuery,
-    staleTime: 60_000,
+    staleTime: 30_000,
   });
 
   const ranked = useMemo(() => {

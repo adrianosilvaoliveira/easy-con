@@ -77,7 +77,7 @@ export const exitSchema = baseMovement.extend({
     'SAIDA_VENCIMENTO',
   ]),
   originLocationId: z.string().uuid(),
-  /** @deprecated Saída de kit agora baixa o lote do kit montado; mantido só para pendências antigas. */
+  /** Composição desta saída de kit (baixa o estoque dos componentes, não do kit). */
   kitComponents: z
     .array(
       z.object({

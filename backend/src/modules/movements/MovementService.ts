@@ -56,6 +56,14 @@ export class MovementService {
   private static requiresApproval(roleName?: RoleName): boolean {
     return roleName === ('OPERACIONAL' satisfies RoleName);
   }
+  private static async requireActiveProduct(productId: string) {
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundError('Produto não encontrado');
+    if (!product.active) {
+      throw new ValidationError('Produto inativo não pode ser usado em movimentações');
+    }
+    return product;
+  }
   private static async updateStock(
     productId: string,
     locationId: string,
@@ -399,8 +407,7 @@ export class MovementService {
     return this.executeEntry(data, userId);
   }
   private static async createPendingEntry(data: EntryDTO, userId: string) {
-    const product = await prisma.product.findUnique({ where: { id: data.productId } });
-    if (!product) throw new NotFoundError('Produto não encontrado');
+    const product = await this.requireActiveProduct(data.productId);
     if (product.productType === 'KIT') {
       throw new ValidationError(
         'Kits não recebem entrada direta — use Montagem de kit para gerar o estoque'
@@ -447,8 +454,7 @@ export class MovementService {
     };
   }
   private static async executeEntry(data: EntryDTO, userId: string) {
-    const product = await prisma.product.findUnique({ where: { id: data.productId } });
-    if (!product) throw new NotFoundError('Produto não encontrado');
+    const product = await this.requireActiveProduct(data.productId);
     if (product.productType === 'KIT') {
       throw new ValidationError(
         'Kits não recebem entrada direta — use Montagem de kit para gerar o estoque'
@@ -525,13 +531,9 @@ export class MovementService {
   }
 
   static async createKitAssembly(data: KitAssemblyDTO, userId: string, roleName?: RoleName) {
-    const kit = await prisma.product.findUnique({ where: { id: data.kitProductId } });
-    if (!kit) throw new NotFoundError('Kit não encontrado');
+    const kit = await this.requireActiveProduct(data.kitProductId);
     if (kit.productType !== 'KIT') {
       throw new ValidationError('O produto selecionado não é um kit');
-    }
-    if (!kit.active) {
-      throw new ValidationError('Kit inativo');
     }
 
     const plan = await this.planKitComponentExit(
@@ -711,11 +713,45 @@ export class MovementService {
   }
 
   static async createExit(data: ExitDTO, userId: string, roleName?: RoleName) {
-    const product = await prisma.product.findUnique({ where: { id: data.productId } });
-    if (!product) throw new NotFoundError('Produto não encontrado');
+    const product = await this.requireActiveProduct(data.productId);
 
-    // Kit montado: baixa o estoque/lote do kit (mesmo fluxo de produto acabado).
-    // Pendências antigas com metadata KIT_EXIT ainda são aprovadas via approveExit.
+    if (product.productType === 'KIT') {
+      if (data.batchId) {
+        throw new ValidationError(
+          'Saída de kit não utiliza lote do kit — a baixa é nos componentes'
+        );
+      }
+      const plan = await this.planKitComponentExit(
+        data.productId,
+        data.originLocationId,
+        data.quantity,
+        data.type,
+        data.kitComponents
+      );
+      if (this.requiresApproval(roleName)) {
+        const movement = await prisma.stockMovement.create({
+          data: {
+            type: data.type,
+            status: 'PENDENTE',
+            productId: data.productId,
+            quantity: data.quantity,
+            originLocationId: data.originLocationId,
+            reason: data.reason,
+            notes: data.notes,
+            movementDate: data.movementDate ? new Date(data.movementDate) : new Date(),
+            userId,
+            metadata: {
+              kind: 'KIT_EXIT',
+              kitComponents: data.kitComponents ?? null,
+            },
+          },
+          include: movementInclude,
+        });
+        return { ...movement, pendingApproval: true };
+      }
+      return this.executeKitExit(data, userId, plan);
+    }
+
     await this.assertExitStockAvailable(data);
     if (this.requiresApproval(roleName)) {
       return this.createPendingExit(data, userId);
@@ -807,6 +843,7 @@ export class MovementService {
     });
   }
   static async createTransfer(data: TransferDTO, userId: string, roleName?: RoleName) {
+    await this.requireActiveProduct(data.productId);
     await this.assertTransferStockAvailable(data);
     if (this.requiresApproval(roleName)) {
       return prisma.stockMovement.create({
@@ -1068,10 +1105,15 @@ export class MovementService {
       kind?: string;
       kitComponents?: NonNullable<ExitDTO['kitComponents']>;
     } | null;
-    // Apenas saídas antigas (baixa por componentes) — kits montados usam o fluxo normal com lote.
-    const isLegacyKitExit = meta?.kind === 'KIT_EXIT';
+    const product = await prisma.product.findUnique({
+      where: { id: movement.productId },
+      select: { productType: true },
+    });
+    const isKitExit =
+      meta?.kind === 'KIT_EXIT' ||
+      (product?.productType === 'KIT' && !movement.batchId);
 
-    if (isLegacyKitExit) {
+    if (isKitExit) {
       const exitData: ExitDTO = {
         type: movement.type as ExitDTO['type'],
         productId: movement.productId,
@@ -1373,7 +1415,7 @@ export class MovementService {
         take: pagination.limit,
         orderBy: { movementDate: 'desc' },
         include: {
-          product: { select: { id: true, name: true, internalCode: true } },
+          product: { select: { id: true, name: true, internalCode: true, productType: true } },
           originLocation: true,
           destinationLocation: true,
           supplier: true,
@@ -1419,6 +1461,11 @@ export class MovementService {
       return { message: 'Movimentação excluída' };
     }
 
+    const meta = movement.metadata as { kind?: string; kitMovementId?: string } | null;
+    const isKitExitHeader = meta?.kind === 'KIT_EXIT';
+    const reversedBatchIds = new Set<string>();
+    if (movement.batchId) reversedBatchIds.add(movement.batchId);
+
     await prisma.$transaction(async (tx) => {
       if (ENTRY_TYPES.includes(movement.type)) {
         if (!movement.destinationLocationId) {
@@ -1433,6 +1480,32 @@ export class MovementService {
         );
         if (movement.batchId) {
           await BatchService.syncBatchQuantity(movement.batchId, tx);
+        }
+      } else if (isKitExitHeader && EXIT_TYPES.includes(movement.type)) {
+        const components = await tx.stockMovement.findMany({
+          where: {
+            AND: [
+              { metadata: { path: ['kind'], equals: 'KIT_EXIT_COMPONENT' } },
+              { metadata: { path: ['kitMovementId'], equals: movement.id } },
+            ],
+          },
+        });
+        for (const component of components) {
+          if (!component.originLocationId) {
+            throw new ValidationError('Origem da saída do componente não informada');
+          }
+          await this.updateStockInTx(
+            tx,
+            component.productId,
+            component.originLocationId,
+            component.batchId,
+            component.quantity
+          );
+          if (component.batchId) {
+            await BatchService.syncBatchQuantity(component.batchId, tx);
+            reversedBatchIds.add(component.batchId);
+          }
+          await tx.stockMovement.delete({ where: { id: component.id } });
         }
       } else if (EXIT_TYPES.includes(movement.type)) {
         if (!movement.originLocationId) {
@@ -1476,8 +1549,8 @@ export class MovementService {
       await tx.stockMovement.delete({ where: { id } });
     });
 
-    if (movement.batchId) {
-      await BatchService.syncBatchAlerts(movement.batchId);
+    for (const batchId of reversedBatchIds) {
+      await BatchService.syncBatchAlerts(batchId);
     }
 
     return { message: 'Movimentação excluída e estoque estornado' };

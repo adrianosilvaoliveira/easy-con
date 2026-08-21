@@ -80,6 +80,15 @@ export class InventoryService {
       throw new ValidationError('Inventário não está em andamento');
     }
 
+    const product = await prisma.product.findUnique({
+      where: { id: data.productId },
+      select: { id: true, active: true },
+    });
+    if (!product) throw new NotFoundError('Produto não encontrado');
+    if (!product.active) {
+      throw new ValidationError('Produto inativo não pode ser incluído no inventário');
+    }
+
     const stockItem = await prisma.stockItem.findFirst({
       where: {
         productId: data.productId,

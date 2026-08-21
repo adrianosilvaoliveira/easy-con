@@ -16,7 +16,6 @@ import { formatDate, formatProductName } from '@/utils/format';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { useAuthStore } from '@/stores/authStore';
 import { useDebounce } from '@/hooks/useDebounce';
-import { IncludeInactiveFilter } from '@/components/ui/IncludeInactiveFilter';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
 import { Controller } from 'react-hook-form';
 import { useLocations } from '@/hooks/queries/useLocations';
@@ -60,7 +59,6 @@ export function ExpirationsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editBatch, setEditBatch] = useState<ProductBatch | null>(null);
-  const [includeInactive, setIncludeInactive] = useState(false);
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -68,20 +66,19 @@ export function ExpirationsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [tab, debouncedSearch, statusFilter, includeInactive]);
+  }, [tab, debouncedSearch, statusFilter]);
 
   const endpoint =
     tab === 'expired' ? '/batches/expired' : tab === 'expiring' ? '/batches/expiring?days=90' : '/batches';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['batches', tab, debouncedSearch, statusFilter, includeInactive, page],
+    queryKey: ['batches', tab, debouncedSearch, statusFilter, page],
     queryFn: () =>
       api
         .get(endpoint, {
           params: {
             search: debouncedSearch,
             status: statusFilter || undefined,
-            includeInactive: includeInactive ? 'true' : undefined,
             page,
             limit: PAGE_SIZE,
           },
@@ -229,7 +226,6 @@ export function ExpirationsPage() {
           <option value="CRITICAL">Crítico</option>
           <option value="EXPIRED">Vencido</option>
         </select>
-        <IncludeInactiveFilter checked={includeInactive} onChange={setIncludeInactive} />
       </div>
 
       <DataTable<ProductBatch>

@@ -169,6 +169,15 @@ export class BatchService {
   }
 
   static async create(data: CreateBatchDTO, userId: string) {
+    const product = await prisma.product.findUnique({
+      where: { id: data.productId },
+      select: { id: true, active: true },
+    });
+    if (!product) throw new NotFoundError('Produto não encontrado');
+    if (!product.active) {
+      throw new ValidationError('Produto inativo não pode receber lote');
+    }
+
     const expirationDate = new Date(data.expirationDate);
     const manufacturingDate = data.manufacturingDate ? new Date(data.manufacturingDate) : null;
 

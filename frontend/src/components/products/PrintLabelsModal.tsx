@@ -124,7 +124,7 @@ export function PrintLabelsModal({ open, onClose, preselected = [] }: PrintLabel
         .get('/products', {
           params: { search: debounced.trim(), limit: 80 },
         })
-        .then((r) => r.data.data as Product[]),
+        .then((r) => (r.data.data as Product[]).filter((p) => p.active !== false)),
     enabled: open && debounced.trim().length >= 2,
   });
 

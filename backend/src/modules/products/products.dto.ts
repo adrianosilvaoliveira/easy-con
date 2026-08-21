@@ -52,6 +52,7 @@ export const listProductsSchema = z.object({
   search: z.string().optional(),
   categoryId: z.string().optional(),
   active: z.string().optional(),
+  includeInactive: z.string().optional(),
   belowMin: z.string().optional(),
   expiringDays: z.string().optional(),
   productType: z.string().optional(),

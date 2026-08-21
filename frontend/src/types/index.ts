@@ -110,7 +110,7 @@ export interface StockMovement {
   status: string;
   quantity: number;
   movementDate: string;
-  product: { id: string; name: string; internalCode: string };
+  product: { id: string; name: string; internalCode: string; productType?: ProductType };
   originLocation?: StockLocation;
   destinationLocation?: StockLocation;
   user: { id: string; name: string };

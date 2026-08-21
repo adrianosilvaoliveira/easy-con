@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,14 +14,20 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
 import { ProductSearchSelect, type ProductOption } from '@/components/products/ProductSearchSelect';
 import { KitBadge } from '@/components/products/ProductTypeSelect';
-import type { StockMovement, PaginatedResponse } from '@/types';
+import type { Product, StockMovement, PaginatedResponse } from '@/types';
 import { formatDateTime, movementTypeLabel, formatProductName } from '@/utils/format';
 import { MovementStatusBadge } from '@/components/movements/MovementApprovalActions';
 import { MovementDetailsModal } from '@/components/movements/MovementDetailsModal';
 import { BatchSelectField } from '@/components/movements/BatchSelectField';
 import { StockOriginSelect } from '@/components/movements/StockOriginSelect';
+import {
+  KitExitEditor,
+  resetKitLinesFromDetail,
+  type KitExitLine,
+} from '@/components/movements/KitExitEditor';
 import { useAvailableLots } from '@/hooks/queries/useAvailableLots';
 import { useProductStockOrigins } from '@/hooks/queries/useProductStockOrigins';
+import { useLocations } from '@/hooks/queries/useLocations';
 import { Pagination } from '@/components/ui/Pagination';
 import { getApiErrorMessage } from '@/utils/apiError';
 
@@ -48,6 +54,8 @@ export function ExitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
+  const [kitLines, setKitLines] = useState<KitExitLine[]>([]);
+  const [kitLinesError, setKitLinesError] = useState('');
   const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
@@ -82,17 +90,50 @@ export function ExitsPage() {
 
   const watchedProductId = watch('productId');
   const watchedOriginId = watch('originLocationId');
+  const watchedQuantity = watch('quantity');
   const isKit = selectedProduct?.productType === 'KIT';
 
-  const { origins, isLoading: originsLoading } = useProductStockOrigins(
-    watchedProductId,
-    modalOpen && !!watchedProductId
+  useEffect(() => {
+    setKitLines([]);
+    setKitLinesError('');
+  }, [watchedProductId]);
+
+  const { origins: productOrigins, isLoading: originsLoading } = useProductStockOrigins(
+    isKit ? undefined : watchedProductId,
+    modalOpen && !isKit
   );
 
+  const { data: allLocations, isLoading: locationsLoading } = useLocations();
+
+  const kitOrigins = useMemo(
+    () =>
+      (allLocations ?? []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        quantity: 0,
+      })),
+    [allLocations]
+  );
+
+  const origins = isKit ? kitOrigins : productOrigins;
+  const originsBusy = isKit ? locationsLoading : originsLoading;
+
+  const { data: kitDetail } = useQuery({
+    queryKey: ['product', watchedProductId, 'kit-exit'],
+    queryFn: () => api.get(`/products/${watchedProductId}`).then((r) => r.data.data as Product),
+    enabled: modalOpen && isKit && !!watchedProductId,
+  });
+
+  useEffect(() => {
+    if (isKit && kitDetail?.kitItems?.length && kitLines.length === 0) {
+      setKitLines(resetKitLinesFromDetail(kitDetail));
+    }
+  }, [isKit, kitDetail, kitLines.length]);
+
   const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
-    watchedProductId,
+    isKit ? undefined : watchedProductId,
     watchedOriginId,
-    modalOpen && !!watchedProductId
+    modalOpen && !isKit
   );
 
   useEffect(() => {
@@ -115,16 +156,20 @@ export function ExitsPage() {
   }, [watchedProductId, watchedOriginId, setValue, clearErrors]);
 
   useEffect(() => {
-    if (lots.length === 1) {
+    if (!isKit && lots.length === 1) {
       setValue('batchId', lots[0].batchId);
     }
-  }, [lots, setValue]);
+  }, [lots, setValue, isKit]);
 
   const mutation = useMutation({
-    mutationFn: (payload: ExitForm) =>
+    mutationFn: (
+      payload: ExitForm & {
+        kitComponents?: Array<{ componentProductId: string; quantity: number; batchId?: string }>;
+      }
+    ) =>
       api.post('/movements/exits', {
         ...payload,
-        batchId: payload.batchId || undefined,
+        batchId: isKit ? undefined : payload.batchId || undefined,
       }),
     onSuccess: (res) => {
       const pendingApproval = res.data.data?.pendingApproval;
@@ -132,7 +177,7 @@ export function ExitsPage() {
         pendingApproval
           ? 'Saída enviada para aprovação'
           : isKit
-            ? 'Saída de kit registrada'
+            ? 'Saída de kit registrada — estoque dos componentes atualizado'
             : 'Saída registrada'
       );
       queryClient.invalidateQueries({ queryKey: ['exits'] });
@@ -141,14 +186,42 @@ export function ExitsPage() {
       queryClient.invalidateQueries({ queryKey: ['kits'] });
       setModalOpen(false);
       setSelectedProduct(null);
+      setKitLines([]);
       reset();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao registrar saída')),
   });
 
   const onSubmit = (data: ExitForm) => {
-    if (hasLots && !data.batchId) {
+    if (!isKit && hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
+      return;
+    }
+    if (isKit) {
+      if (kitLines.length < 1) {
+        setKitLinesError('Inclua ao menos um produto na saída do kit');
+        return;
+      }
+      const kitQty = Math.max(1, Number(data.quantity) || 1);
+      for (const line of kitLines) {
+        if (!line.componentProductId) {
+          setKitLinesError('Há produtos inválidos na lista');
+          return;
+        }
+        if (line.hasLots && !line.batchId) {
+          setKitLinesError(`Selecione o lote de "${formatProductName(line.name)}"`);
+          return;
+        }
+      }
+      setKitLinesError('');
+      mutation.mutate({
+        ...data,
+        kitComponents: kitLines.map((l) => ({
+          componentProductId: l.componentProductId,
+          quantity: l.quantityPerKit * kitQty,
+          batchId: l.batchId || undefined,
+        })),
+      });
       return;
     }
     mutation.mutate(data);
@@ -157,6 +230,8 @@ export function ExitsPage() {
   const closeModal = () => {
     setModalOpen(false);
     setSelectedProduct(null);
+    setKitLines([]);
+    setKitLinesError('');
     reset();
   };
 
@@ -185,7 +260,7 @@ export function ExitsPage() {
             render: (m) => (
               <span className="flex items-center gap-2">
                 {formatProductName(m.product.name)}
-                {(m.product as { productType?: string }).productType === 'KIT' && <KitBadge />}
+                {m.product.productType === 'KIT' && <KitBadge />}
               </span>
             ),
           },
@@ -239,7 +314,7 @@ export function ExitsPage() {
             />
             {isKit && (
               <p className="mt-1 text-xs text-teal-700 dark:text-teal-400">
-                Kit montado: a baixa usa o lote do kit (não dos componentes).
+                Kit sem estoque próprio: a baixa usa os itens da composição.
               </p>
             )}
           </div>
@@ -252,28 +327,33 @@ export function ExitsPage() {
                 onChange={(id) => {
                   field.onChange(id);
                   setValue('batchId', undefined);
+                  setKitLines((prev) =>
+                    prev.map((l) => ({ ...l, batchId: '', hasLots: undefined }))
+                  );
                 }}
                 origins={origins}
                 productSelected={!!watchedProductId}
-                loading={originsLoading}
+                loading={originsBusy}
                 error={errors.originLocationId?.message}
-                label="Origem"
+                label={isKit ? 'Local de baixa dos componentes' : 'Origem'}
               />
             )}
           />
-          <Controller
-            name="batchId"
-            control={control}
-            render={({ field }) => (
-              <BatchSelectField
-                lots={lots}
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.batchId?.message}
-                loading={lotsLoading && !!watchedOriginId}
-              />
-            )}
-          />
+          {!isKit && (
+            <Controller
+              name="batchId"
+              control={control}
+              render={({ field }) => (
+                <BatchSelectField
+                  lots={lots}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.batchId?.message}
+                  loading={lotsLoading && !!watchedOriginId}
+                />
+              )}
+            />
+          )}
           <Input
             label={isKit ? 'Quantidade de kits' : 'Quantidade'}
             type="number"
@@ -281,11 +361,22 @@ export function ExitsPage() {
           />
           <Input label="Motivo" {...register('reason')} />
 
+          {isKit && (
+            <KitExitEditor
+              kitDetail={kitDetail}
+              locationId={watchedOriginId}
+              kitQuantity={Number(watchedQuantity) || 1}
+              lines={kitLines}
+              onChange={setKitLines}
+              error={kitLinesError}
+            />
+          )}
+
           <div className="sm:col-span-2 flex justify-end gap-2">
             <Button variant="secondary" type="button" onClick={closeModal}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button type="submit" loading={mutation.isPending}>
               {mutation.isPending ? 'Registrando...' : 'Registrar'}
             </Button>
           </div>
