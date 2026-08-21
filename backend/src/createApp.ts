@@ -60,7 +60,11 @@ export function createApp(): Express {
     })
   );
 
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  try {
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  } catch (err) {
+    logger.warn('Swagger docs unavailable', err);
+  }
   app.use('/api', apiRoutes);
 
   app.use(errorHandler);

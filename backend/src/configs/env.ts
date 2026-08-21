@@ -39,7 +39,10 @@ function vercelOrigin(): string | undefined {
 }
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.preprocess(
+    (v) => (v === '' || v == null ? undefined : v),
+    z.enum(['development', 'production', 'test']).default('development')
+  ),
   PORT: z.coerce.number().default(3333),
   API_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1),
@@ -65,8 +68,9 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error('❌ Invalid environment variables:', parsed.error.flatten().fieldErrors);
-  process.exit(1);
+  const fields = parsed.error.flatten().fieldErrors;
+  console.error('❌ Invalid environment variables:', fields);
+  throw new Error(`Invalid environment variables: ${JSON.stringify(fields)}`);
 }
 
 const data = parsed.data;
