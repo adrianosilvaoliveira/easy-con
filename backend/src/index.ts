@@ -1,3 +1,4 @@
+import './shared/types/express';
 import type { Express, NextFunction, Request, Response } from 'express';
 import express from 'express';
 
