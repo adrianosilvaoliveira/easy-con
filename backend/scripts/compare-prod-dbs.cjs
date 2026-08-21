@@ -103,13 +103,21 @@ async function main() {
   }
 
   let mismatches = 0;
+  let supabaseBehind = 0;
   console.log('[compare-dbs] --- table | supabase | prisma ---');
   for (const t of TABLES) {
     const s = sCounts[t];
     const p = pCounts ? pCounts[t] : 'n/a';
-    const mark =
-      pCounts && s !== null && p !== null && s !== p ? ' << MISMATCH' : '';
-    if (mark) mismatches += 1;
+    let mark = '';
+    if (pCounts && s !== null && p !== null && s !== p) {
+      mismatches += 1;
+      if (s < p) {
+        supabaseBehind += 1;
+        mark = ' << SUPABASE_BEHIND';
+      } else {
+        mark = ' << supabase ahead (ok)';
+      }
+    }
     console.log(`[compare-dbs] ${t}: ${s} | ${p}${mark}`);
   }
 
@@ -122,14 +130,20 @@ async function main() {
     return;
   }
 
-  if (mismatches > 0) {
+  if (supabaseBehind > 0) {
     console.log(
-      `[compare-dbs] CUTOVER_BLOCKED: ${mismatches} tabelas divergem — NAO apague Prisma ainda.`,
+      `[compare-dbs] CUTOVER_BLOCKED: ${supabaseBehind} tabelas no Supabase atrasadas vs Prisma — sincronize antes.`,
     );
     return;
   }
 
-  console.log('[compare-dbs] OK: Supabase populado' + (pCounts ? ' e alinhado ao Prisma.' : '.'));
+  if (mismatches > 0) {
+    console.log(
+      `[compare-dbs] OK: ${mismatches} divergencias, todas com Supabase >= Prisma (producao viva no Supabase).`,
+    );
+  } else {
+    console.log('[compare-dbs] OK: Supabase populado' + (pCounts ? ' e alinhado ao Prisma.' : '.'));
+  }
   console.log(
     `[compare-dbs] CUTOVER_READY users=${users} products=${products} movements=${movements}`,
   );
