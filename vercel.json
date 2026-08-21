@@ -7,13 +7,12 @@
       "framework": "vite"
     },
     "backend": {
-      "entrypoint": "backend/src/index.cts",
+      "entrypoint": "backend/dist/vercel.cjs",
       "routePrefix": "/_/backend",
       "framework": "express",
       "includeFiles": [
-        "node_modules/**",
-        "backend/node_modules/**",
-        "backend/prisma/**"
+        "backend/node_modules/@prisma/**",
+        "backend/node_modules/.prisma/**"
       ]
     }
   }
