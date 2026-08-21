@@ -1,1 +1,1 @@
-export { default } from './src/index';
+export { createApp as default } from './src/createApp';

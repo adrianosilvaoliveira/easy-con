@@ -7,9 +7,13 @@
       "framework": "vite"
     },
     "backend": {
-      "entrypoint": "backend/src/index.ts",
+      "entrypoint": "backend/src/index.mjs",
       "routePrefix": "/_/backend",
-      "framework": "express"
+      "framework": "express",
+      "includeFiles": [
+        "backend/node_modules/@prisma/**",
+        "backend/node_modules/.prisma/**"
+      ]
     }
   }
 }
