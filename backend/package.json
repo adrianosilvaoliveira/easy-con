@@ -2,7 +2,7 @@
   "name": "hospital-stock-backend",
   "version": "1.0.0",
   "description": "Sistema de controle de estoque hospitalar oftalmológico",
-  "main": "src/index.cts",
+  "main": "src/index.cjs",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "node scripts/run-supabase-data-migration.cjs && node scripts/compare-prod-dbs.cjs && node scripts/prepare-env.cjs && prisma generate && prisma migrate deploy && tsc && node scripts/bundle-vercel.cjs",

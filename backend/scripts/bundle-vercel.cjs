@@ -9,15 +9,15 @@ const root = path.join(__dirname, '..');
 
 buildSync({
   absWorkingDir: root,
-  entryPoints: ['src/index.cts'],
+  entryPoints: ['src/vercel-entry.ts'],
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  outfile: 'vercel-lambda.cjs',
+  outfile: 'src/index.cjs',
   sourcemap: false,
   external: ['@prisma/client'],
   logLevel: 'info',
 });
 
-console.log('[bundle-vercel] wrote vercel-lambda.cjs');
+console.log('[bundle-vercel] wrote src/index.cjs');

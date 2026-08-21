@@ -7,7 +7,7 @@
       "framework": "vite"
     },
     "backend": {
-      "entrypoint": "backend/vercel-lambda.cjs",
+      "entrypoint": "backend/src/index.cjs",
       "routePrefix": "/_/backend",
       "framework": "express",
       "includeFiles": [
