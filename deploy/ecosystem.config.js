@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'hospital-stock-api',
-      script: './dist/server.js',
+      script: './dist/dev-server.js',
       cwd: '/var/www/hospital-stock/backend',
       instances: 'max',
       exec_mode: 'cluster',

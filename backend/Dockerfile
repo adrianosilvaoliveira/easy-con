@@ -36,4 +36,4 @@ RUN mkdir -p logs
 
 EXPOSE 3333
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/dev-server.js"]
