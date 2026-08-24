@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
 import { OrganizationService } from '../modules/organization/OrganizationService';
+import { AppError } from '../shared/errors/AppError';
 import { logger } from '../shared/logger';
 
 interface PdfColumn {
@@ -52,12 +53,17 @@ export class PdfProvider {
       res.setHeader('Cache-Control', 'private, no-store');
       res.send(pdf);
     } catch (err) {
+      if (err instanceof AppError) throw err;
       logger.error('Falha ao gerar PDF', {
         filename: options.filename,
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });
-      throw err;
+      throw new AppError(
+        'Não foi possível gerar o PDF. Tente novamente.',
+        500,
+        'PDF_GENERATION_FAILED'
+      );
     }
   }
 
