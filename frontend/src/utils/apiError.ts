@@ -28,3 +28,23 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
 
   return data?.message || fallback;
 }
+
+/** Axios com `responseType: 'blob'` devolve erro JSON como Blob. */
+export async function getApiErrorMessageAsync(err: unknown, fallback: string): Promise<string> {
+  const ax = err as ApiErrorLike & { response?: { data?: unknown; status?: number } };
+  const data = ax.response?.data;
+
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    const text = await data.text().catch(() => '');
+    try {
+      const json = JSON.parse(text) as ApiErrorPayload;
+      if (json.message) return json.message;
+    } catch {
+      /* corpo não é JSON */
+    }
+    if (ax.response?.status === 403) return 'Sem permissão para exportar relatórios.';
+    if (ax.response?.status === 401) return 'Sessão expirada. Faça login novamente.';
+  }
+
+  return getApiErrorMessage(err, fallback);
+}

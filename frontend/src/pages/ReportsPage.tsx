@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Filter, X, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
+import { getApiErrorMessageAsync } from '@/utils/apiError';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -68,15 +69,30 @@ export function ReportsPage() {
   };
 
   const fetchPdfBlob = async (report: ReportDef) => {
-    const response = await api.get<Blob>(`${report.endpoint}${buildQuery(report)}`, {
-      responseType: 'blob',
-    });
+    let response;
+    try {
+      response = await api.get<Blob>(`${report.endpoint}${buildQuery(report)}`, {
+        responseType: 'blob',
+        timeout: 90_000,
+      });
+    } catch (err) {
+      throw new Error(await getApiErrorMessageAsync(err, 'Erro ao gerar PDF'));
+    }
+
     const blob = response.data;
+    const header = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+    const magic = String.fromCharCode(...header);
     const contentType = String(response.headers['content-type'] || blob.type || '');
 
-    if (!contentType.includes('application/pdf')) {
-      const message = await blob.text().catch(() => '');
-      throw new Error(message || 'Resposta inválida ao gerar PDF');
+    if (!contentType.includes('application/pdf') && !magic.startsWith('%PDF')) {
+      const raw = await blob.text().catch(() => '');
+      let fromJson = '';
+      try {
+        fromJson = (JSON.parse(raw) as { message?: string }).message || '';
+      } catch {
+        /* corpo não é JSON */
+      }
+      throw new Error(fromJson || 'Resposta inválida ao gerar PDF');
     }
 
     return blob.type === 'application/pdf'
@@ -94,18 +110,19 @@ export function ReportsPage() {
       a.click();
       window.URL.revokeObjectURL(blobUrl);
       toast.success('PDF baixado');
-    } catch {
-      toast.error('Erro ao gerar PDF');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao gerar PDF');
     }
   };
 
   const openPdfInNewTab = async (report: ReportDef) => {
+    const tab = window.open('about:blank', '_blank');
     try {
       const blob = await fetchPdfBlob(report);
       const blobUrl = window.URL.createObjectURL(blob);
-      const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      if (!opened) {
-        // Fallback se o navegador bloquear pop-up
+      if (tab) {
+        tab.location.replace(blobUrl);
+      } else {
         const a = document.createElement('a');
         a.href = blobUrl;
         a.target = '_blank';
@@ -114,8 +131,9 @@ export function ReportsPage() {
       }
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
       toast.success('PDF aberto em nova aba');
-    } catch {
-      toast.error('Erro ao abrir PDF');
+    } catch (err) {
+      tab?.close();
+      toast.error(err instanceof Error ? err.message : 'Erro ao abrir PDF');
     }
   };
 

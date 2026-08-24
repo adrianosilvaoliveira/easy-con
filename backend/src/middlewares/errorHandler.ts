@@ -15,6 +15,15 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
+  if (res.headersSent) {
+    logger.error('Unhandled error after headers sent', {
+      message: err.message,
+      stack: err.stack,
+      requestId: req.requestId,
+    });
+    return;
+  }
+
   if (err instanceof ZodError) {
     res.status(422).json({
       success: false,

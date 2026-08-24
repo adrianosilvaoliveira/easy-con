@@ -13,7 +13,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatDate, formatProductName } from '@/utils/format';
-import { getApiErrorMessage } from '@/utils/apiError';
+import { getApiErrorMessage, getApiErrorMessageAsync } from '@/utils/apiError';
 import { useAuthStore } from '@/stores/authStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ProductSearchSelect } from '@/components/products/ProductSearchSelect';
@@ -125,15 +125,33 @@ export function ExpirationsPage() {
 
   const downloadPdf = async (type: string) => {
     try {
-      const res = await api.get(`/reports/${type}/pdf`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(res.data);
+      const res = await api.get<Blob>(`/reports/${type}/pdf`, {
+        responseType: 'blob',
+        timeout: 90_000,
+      });
+      const blob = res.data;
+      const header = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+      const magic = String.fromCharCode(...header);
+      if (!magic.startsWith('%PDF')) {
+        throw new Error('Resposta inválida ao gerar PDF');
+      }
+      const url = window.URL.createObjectURL(
+        blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' })
+      );
       const a = document.createElement('a');
       a.href = url;
       a.download = `${type}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Erro ao gerar PDF');
+    } catch (err) {
+      const axiosErr = err as { response?: unknown };
+      toast.error(
+        axiosErr.response
+          ? await getApiErrorMessageAsync(err, 'Erro ao gerar PDF')
+          : err instanceof Error
+            ? err.message
+            : 'Erro ao gerar PDF'
+      );
     }
   };
 

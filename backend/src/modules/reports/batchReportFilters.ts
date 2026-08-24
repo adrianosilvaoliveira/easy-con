@@ -32,10 +32,12 @@ export function buildReportSubtitle(filters: BatchReportFilters): string {
   const parts: string[] = [];
 
   if (filters.startDate || filters.endDate) {
-    parts.push(`Período: ${filters.startDate || '…'} a ${filters.endDate || 'hoje'}`);
+    parts.push(`Período: ${filters.startDate || '...'} a ${filters.endDate || 'hoje'}`);
   }
   if (filters.expirationFrom || filters.expirationTo) {
-    parts.push(`Validade: ${filters.expirationFrom || '…'} a ${filters.expirationTo || '…'}`);
+    parts.push(
+      `Validade: ${filters.expirationFrom || '...'} a ${filters.expirationTo || '...'}`
+    );
   }
   if (filters.expiringDays) parts.push(`Vencendo em até ${filters.expiringDays} dias`);
   if (filters.onlyExpired === 'true') parts.push('Somente vencidos');
