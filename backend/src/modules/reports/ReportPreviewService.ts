@@ -388,6 +388,7 @@ export class ReportPreviewService {
       buildReportSubtitle(filters),
       [
         { header: 'Local', key: 'location' },
+        { header: 'Código', key: 'code' },
         { header: 'Produto', key: 'product' },
         { header: 'Lote', key: 'lot' },
         { header: 'Validade', key: 'expiry' },
