@@ -228,6 +228,17 @@ export function ProductFormModal({
         setKitItemsError('Informe a quantidade de cada item');
         return false;
       }
+      if (item.requiresBatch === undefined) {
+        setKitItemsError('Aguarde o carregamento dos lotes dos produtos');
+        return false;
+      }
+      if (item.requiresBatch && !item.batchId) {
+        const label = item.product?.name
+          ? formatProductName(item.product.name)
+          : 'um dos produtos';
+        setKitItemsError(`Selecione o lote de "${label}"`);
+        return false;
+      }
     }
     setKitItemsError('');
     return true;

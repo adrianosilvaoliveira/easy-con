@@ -83,7 +83,7 @@ function KitItemRow({
         {item.componentProductId && (
           <div>
             <label className="form-label">
-              Lote preferencial
+              {hasLots ? 'Lote *' : 'Lote'}
             </label>
             {isLoading ? (
               <p className="text-xs text-slate-500">Carregando lotes...</p>
@@ -92,8 +92,9 @@ function KitItemRow({
                 className="input-field w-full"
                 value={item.batchId}
                 onChange={(e) => onUpdate({ batchId: e.target.value })}
+                required
               >
-                <option value="">Opcional — escolhido na montagem</option>
+                <option value="">Selecione o lote *</option>
                 {batchData?.batches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.batchNumber}
@@ -143,7 +144,7 @@ export function KitItemsEditor({ items, onChange, errors }: KitItemsEditorProps)
             Produtos do kit *
           </h3>
           <p className="text-xs text-slate-500">
-            Mínimo de 2 produtos. Lotes são escolhidos na montagem do kit.
+            Mínimo de 2 produtos. Informe o lote de cada item — ele fica gravado para montagem e saída.
           </p>
         </div>
         <Button type="button" variant="secondary" size="sm" onClick={addItem}>

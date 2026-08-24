@@ -18,6 +18,7 @@ export type KitExitLine = {
   quantityPerKit: number;
   batchId: string;
   preferredBatchId?: string;
+  preferredBatchNumber?: string;
   /** true quando há lotes no local selecionado */
   hasLots?: boolean;
 };
@@ -36,6 +37,7 @@ function ComponentLotSelect({
   locationId,
   value,
   preferredBatchId,
+  preferredBatchNumber,
   onChange,
   onLotsResolved,
   required,
@@ -44,6 +46,7 @@ function ComponentLotSelect({
   locationId?: string;
   value: string;
   preferredBatchId?: string;
+  preferredBatchNumber?: string;
   onChange: (batchId: string) => void;
   onLotsResolved?: (hasLots: boolean) => void;
   required: boolean;
@@ -58,19 +61,33 @@ function ComponentLotSelect({
 
   useEffect(() => {
     if (!hasLots || isLoading) return;
-    if (value) return;
-    if (preferredBatchId && lots.some((l) => l.batchId === preferredBatchId)) {
-      onChange(preferredBatchId);
+    const preferred =
+      (preferredBatchId && lots.some((l) => l.batchId === preferredBatchId)
+        ? preferredBatchId
+        : undefined) ||
+      (preferredBatchNumber
+        ? lots.find((l) => l.batchNumber === preferredBatchNumber)?.batchId
+        : undefined);
+    const valueInLots = Boolean(value && lots.some((l) => l.batchId === value));
+    if (preferred && !valueInLots && preferred !== value) {
+      onChange(preferred);
       return;
     }
-    if (lots.length === 1) {
+    if (valueInLots) return;
+    if (!value && lots.length === 1) {
       onChange(lots[0].batchId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasLots, isLoading, lots, value, preferredBatchId]);
+  }, [hasLots, isLoading, lots, value, preferredBatchId, preferredBatchNumber]);
 
   if (!locationId) {
-    return <p className="text-xs text-slate-500">Selecione o local primeiro</p>;
+    return preferredBatchNumber ? (
+      <p className="rounded border border-teal-200 bg-teal-50/60 px-2 py-1.5 text-xs text-teal-800 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-200">
+        Lote gravado: {preferredBatchNumber}
+      </p>
+    ) : (
+      <p className="text-xs text-slate-500">Selecione o local primeiro</p>
+    );
   }
   if (isLoading) {
     return <p className="text-xs text-slate-500">Carregando lotes...</p>;
@@ -83,24 +100,47 @@ function ComponentLotSelect({
     );
   }
 
+  const savedLotMissing =
+    Boolean(preferredBatchNumber) &&
+    !lots.some(
+      (l) =>
+        l.batchId === preferredBatchId || l.batchNumber === preferredBatchNumber
+    );
+
   return (
-    <select
-      className={cn('input-field w-full text-sm', required && !value && 'border-amber-400')}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      required={required}
-    >
-      <option value="">
-        {lots.length > 1 ? 'Selecione o lote *' : 'Selecione o lote...'}
-      </option>
-      {lots.map((lot) => (
-        <option key={lot.batchId} value={lot.batchId}>
-          {lot.batchNumber}
-          {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
-          {` (${lot.quantity} un.)`}
+    <div className="space-y-1">
+      {preferredBatchNumber && !savedLotMissing && (
+        <p className="text-[11px] text-teal-700 dark:text-teal-300">
+          Lote da composição: {preferredBatchNumber}
+        </p>
+      )}
+      {savedLotMissing && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          Lote gravado ({preferredBatchNumber}) não está neste local
+        </p>
+      )}
+      <select
+        className={cn('input-field w-full text-sm', required && !value && 'border-amber-400')}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+      >
+        <option value="">
+          {preferredBatchNumber && !savedLotMissing
+            ? 'Usando lote da composição'
+            : lots.length > 1
+              ? 'Selecione o lote *'
+              : 'Selecione o lote...'}
         </option>
-      ))}
-    </select>
+        {lots.map((lot) => (
+          <option key={lot.batchId} value={lot.batchId}>
+            {lot.batchNumber}
+            {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
+            {` (${lot.quantity} un.)`}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -113,6 +153,7 @@ function lineFromKitItem(ki: ProductKitItem): KitExitLine {
     quantityPerKit: ki.quantity,
     batchId: ki.batchId || ki.batch?.id || '',
     preferredBatchId: ki.batchId || ki.batch?.id || undefined,
+    preferredBatchNumber: ki.batch?.batchNumber || undefined,
   };
 }
 
@@ -171,7 +212,7 @@ export function KitExitEditor({
             <KitBadge /> Editar composição desta saída
           </p>
           <p className="mt-1 text-xs text-teal-800 dark:text-teal-200">
-            Inclua ou remova produtos. Se houver mais de um lote no local, escolha qual usar.
+            Inclua ou remova produtos. Os lotes gravados na composição são usados automaticamente.
             A quantidade por produto é multiplicada pela quantidade de kits ({qtyKits}).
           </p>
         </div>
@@ -239,6 +280,7 @@ export function KitExitEditor({
                   locationId={locationId}
                   value={line.batchId}
                   preferredBatchId={line.preferredBatchId}
+                  preferredBatchNumber={line.preferredBatchNumber}
                   required={!!line.hasLots}
                   onChange={(batchId) => updateLine(line.key, { batchId })}
                   onLotsResolved={(hasLots) => {

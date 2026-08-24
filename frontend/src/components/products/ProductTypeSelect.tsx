@@ -40,7 +40,7 @@ export function ProductTypeSelect({ onSelect }: ProductTypeSelectProps) {
           <Boxes className="h-8 w-8 text-teal-600 dark:text-teal-400" />
           <span className="font-semibold text-slate-900 dark:text-slate-100">Kit</span>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Conjunto de dois ou mais produtos (com lotes quando houver)
+            Conjunto de dois ou mais produtos — informe o lote de cada item
           </span>
         </button>
       </div>

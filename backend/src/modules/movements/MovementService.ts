@@ -151,6 +151,42 @@ export class MovementService {
     await BatchService.getFefoBatches(data.productId, data.originLocationId, data.quantity);
   }
 
+  /**
+   * Usa o lote gravado na composição do kit, inclusive quando o mesmo número
+   * existe neste local com outro id (lote é por local).
+   */
+  private static async resolveKitBatchAtLocation(
+    productId: string,
+    locationId: string,
+    batchId: string | null | undefined
+  ): Promise<string | null> {
+    if (!batchId) return null;
+
+    const atLocation = await prisma.stockItem.findFirst({
+      where: { productId, locationId, batchId },
+      select: { id: true },
+    });
+    if (atLocation) return batchId;
+
+    const preferred = await prisma.productBatch.findUnique({
+      where: { id: batchId },
+      select: { batchNumber: true, productId: true },
+    });
+    if (!preferred || preferred.productId !== productId) return batchId;
+
+    const equivalent = await prisma.productBatch.findUnique({
+      where: {
+        productId_stockLocationId_batchNumber: {
+          productId,
+          stockLocationId: locationId,
+          batchNumber: preferred.batchNumber,
+        },
+      },
+      select: { id: true },
+    });
+    return equivalent?.id ?? batchId;
+  }
+
   /** Plano de baixa dos componentes de um kit no local informado. */
   private static async planKitComponentExit(
     kitProductId: string,
@@ -173,6 +209,17 @@ export class MovementService {
       name: string;
     };
 
+    const kitItems = await prisma.productKitItem.findMany({
+      where: { kitProductId },
+      include: {
+        componentProduct: { select: { id: true, name: true, active: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const recipeBatchByComponent = new Map(
+      kitItems.map((item) => [item.componentProductId, item.batchId])
+    );
+
     let lines: Line[];
 
     if (overrides?.length) {
@@ -191,18 +238,11 @@ export class MovementService {
         lines.push({
           componentProductId: component.id,
           quantity: row.quantity,
-          batchId: row.batchId,
+          batchId: row.batchId || recipeBatchByComponent.get(component.id) || null,
           name: component.name,
         });
       }
     } else {
-      const kitItems = await prisma.productKitItem.findMany({
-        where: { kitProductId },
-        include: {
-          componentProduct: { select: { id: true, name: true, active: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      });
       if (kitItems.length < 2) {
         throw new ValidationError('Kit sem composição válida (mínimo 2 produtos)');
       }
@@ -223,19 +263,24 @@ export class MovementService {
     for (const item of lines) {
       const need = item.quantity;
       const name = item.name;
+      const resolvedBatchId = await this.resolveKitBatchAtLocation(
+        item.componentProductId,
+        originLocationId,
+        item.batchId
+      );
 
-      if (item.batchId) {
+      if (resolvedBatchId) {
         const stock = await prisma.stockItem.findFirst({
           where: {
             productId: item.componentProductId,
             locationId: originLocationId,
-            batchId: item.batchId,
+            batchId: resolvedBatchId,
           },
           include: { batch: true },
         });
         if (!stock || stock.quantity < need) {
           throw new ValidationError(
-            `Estoque insuficiente no lote selecionado de "${name}" (necessário ${need} un.)`
+            `Estoque insuficiente no lote gravado de "${name}" (necessário ${need} un.)`
           );
         }
         if (
@@ -250,7 +295,7 @@ export class MovementService {
         plan.push({
           componentProductId: item.componentProductId,
           componentName: name,
-          batchId: item.batchId,
+          batchId: resolvedBatchId,
           quantity: need,
         });
         continue;

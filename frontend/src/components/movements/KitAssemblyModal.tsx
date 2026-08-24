@@ -15,11 +15,13 @@ import type { Product, ProductKitItem } from '@/types';
 import { cn } from '@/utils/cn';
 
 type AssemblyLine = {
+  key: string;
   componentProductId: string;
   name: string;
   quantityPerKit: number;
   batchId: string;
   preferredBatchId?: string;
+  preferredBatchNumber?: string;
   hasLots?: boolean;
 };
 
@@ -36,6 +38,7 @@ function ComponentLotSelect({
   locationId,
   value,
   preferredBatchId,
+  preferredBatchNumber,
   onChange,
   onLotsResolved,
   requiredQty,
@@ -44,6 +47,7 @@ function ComponentLotSelect({
   locationId?: string;
   value: string;
   preferredBatchId?: string;
+  preferredBatchNumber?: string;
   onChange: (batchId: string) => void;
   onLotsResolved?: (hasLots: boolean) => void;
   requiredQty: number;
@@ -62,19 +66,33 @@ function ComponentLotSelect({
 
   useEffect(() => {
     if (!hasLots || isLoading) return;
-    if (value) return;
-    if (preferredBatchId && lots.some((l) => l.batchId === preferredBatchId)) {
-      onChange(preferredBatchId);
+    const preferred =
+      (preferredBatchId && lots.some((l) => l.batchId === preferredBatchId)
+        ? preferredBatchId
+        : undefined) ||
+      (preferredBatchNumber
+        ? lots.find((l) => l.batchNumber === preferredBatchNumber)?.batchId
+        : undefined);
+    const valueInLots = Boolean(value && lots.some((l) => l.batchId === value));
+    if (preferred && (!valueInLots) && preferred !== value) {
+      onChange(preferred);
       return;
     }
-    if (lots.length === 1) {
+    if (valueInLots) return;
+    if (!value && lots.length === 1) {
       onChange(lots[0].batchId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasLots, isLoading, lots, value, preferredBatchId]);
+  }, [hasLots, isLoading, lots, value, preferredBatchId, preferredBatchNumber]);
 
   if (!locationId) {
-    return <p className="text-xs text-slate-500">Selecione o local primeiro</p>;
+    return preferredBatchNumber ? (
+      <p className="rounded border border-teal-200 bg-teal-50/60 px-2 py-1.5 text-xs text-teal-800 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-200">
+        Lote gravado: {preferredBatchNumber}
+      </p>
+    ) : (
+      <p className="text-xs text-slate-500">Selecione o local primeiro</p>
+    );
   }
   if (isLoading) {
     return <p className="text-xs text-slate-500">Carregando lotes...</p>;
@@ -87,33 +105,68 @@ function ComponentLotSelect({
     );
   }
 
+  const savedLotMissing =
+    Boolean(preferredBatchNumber) &&
+    !lots.some(
+      (l) =>
+        l.batchId === preferredBatchId || l.batchNumber === preferredBatchNumber
+    );
+
   return (
-    <select
-      className={cn('input-field w-full text-sm', !value && 'border-amber-400')}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      required={hasLots}
-    >
-      <option value="">{lots.length > 1 ? 'Selecione o lote *' : 'Selecione o lote...'}</option>
-      {lots.map((lot) => (
-        <option key={lot.batchId} value={lot.batchId} disabled={lot.quantity < requiredQty}>
-          {lot.batchNumber}
-          {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
-          {` (${lot.quantity} un.)`}
+    <div className="space-y-1">
+      {preferredBatchNumber && !savedLotMissing && (
+        <p className="text-[11px] text-teal-700 dark:text-teal-300">
+          Lote da composição: {preferredBatchNumber}
+        </p>
+      )}
+      {savedLotMissing && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          Lote gravado ({preferredBatchNumber}) não está neste local
+        </p>
+      )}
+      <select
+        className={cn('input-field w-full text-sm', !value && 'border-amber-400')}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={hasLots}
+      >
+        <option value="">
+          {preferredBatchNumber && !savedLotMissing
+            ? 'Usando lote da composição'
+            : lots.length > 1
+              ? 'Selecione o lote *'
+              : 'Selecione o lote...'}
         </option>
-      ))}
-    </select>
+        {lots.map((lot) => (
+          <option key={lot.batchId} value={lot.batchId} disabled={lot.quantity < requiredQty}>
+            {lot.batchNumber}
+            {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
+            {` (${lot.quantity} un.)`}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
 function linesFromKit(kit: Product): AssemblyLine[] {
   return (kit.kitItems ?? []).map((ki: ProductKitItem) => ({
+    key: ki.id,
     componentProductId: ki.componentProductId || ki.componentProduct.id,
     name: ki.componentProduct.name,
     quantityPerKit: ki.quantity,
-    batchId: '',
+    batchId: ki.batchId || ki.batch?.id || '',
     preferredBatchId: ki.batchId || ki.batch?.id || undefined,
+    preferredBatchNumber: ki.batch?.batchNumber || undefined,
   }));
+}
+
+function uniqueLocationFromKit(kit: Product): string {
+  const ids = (kit.kitItems ?? [])
+    .map((ki) => ki.batch?.stockLocation?.id)
+    .filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return '';
+  return ids.every((id) => id === ids[0]) ? ids[0] : '';
 }
 
 export function KitAssemblyModal({
@@ -161,20 +214,20 @@ export function KitAssemblyModal({
   }, [open, initialKitId]);
 
   useEffect(() => {
-    if (kitDetail?.productType === 'KIT' && kitDetail.kitItems?.length) {
-      setLines(linesFromKit(kitDetail));
-      if (!selectedKit || selectedKit.id !== kitDetail.id) {
-        setSelectedKit({
-          id: kitDetail.id,
-          name: kitDetail.name,
-          internalCode: kitDetail.internalCode,
-          productType: kitDetail.productType,
-          barcode: kitDetail.barcode,
-        });
-      }
+    if (!open || kitDetail?.productType !== 'KIT' || !kitDetail.kitItems?.length) return;
+    setLines(linesFromKit(kitDetail));
+    setLocationId(uniqueLocationFromKit(kitDetail));
+    if (!selectedKit || selectedKit.id !== kitDetail.id) {
+      setSelectedKit({
+        id: kitDetail.id,
+        name: kitDetail.name,
+        internalCode: kitDetail.internalCode,
+        productType: kitDetail.productType,
+        barcode: kitDetail.barcode,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kitDetail?.id]);
+  }, [open, kitDetail?.id]);
 
   useEffect(() => {
     setLines((prev) =>
@@ -206,10 +259,8 @@ export function KitAssemblyModal({
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao montar kit')),
   });
 
-  const updateLine = (componentProductId: string, patch: Partial<AssemblyLine>) => {
-    setLines((prev) =>
-      prev.map((l) => (l.componentProductId === componentProductId ? { ...l, ...patch } : l))
-    );
+  const updateLine = (key: string, patch: Partial<AssemblyLine>) => {
+    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -285,6 +336,7 @@ export function KitAssemblyModal({
             onChange={(id, product) => {
               setSelectedKit(product ?? null);
               setLines([]);
+              setLocationId('');
               if (!id) setSelectedKit(null);
             }}
           />
@@ -356,7 +408,7 @@ export function KitAssemblyModal({
               Componentes a baixar
             </h3>
             <p className="text-xs text-slate-500">
-              Selecione o lote de cada item no local. Quantidades = composição × kits.
+              Lotes gravados na composição são usados automaticamente. Quantidades = composição × kits.
             </p>
           </div>
 
@@ -372,7 +424,7 @@ export function KitAssemblyModal({
                 const need = line.quantityPerKit * kitQty;
                 return (
                   <div
-                    key={line.componentProductId}
+                    key={line.key}
                     className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end dark:border-slate-600"
                   >
                     <div>
@@ -391,11 +443,12 @@ export function KitAssemblyModal({
                         locationId={locationId || undefined}
                         value={line.batchId}
                         preferredBatchId={line.preferredBatchId}
+                        preferredBatchNumber={line.preferredBatchNumber}
                         requiredQty={need}
-                        onChange={(batchId) => updateLine(line.componentProductId, { batchId })}
+                        onChange={(batchId) => updateLine(line.key, { batchId })}
                         onLotsResolved={(hasLots) => {
                           if (line.hasLots !== hasLots) {
-                            updateLine(line.componentProductId, {
+                            updateLine(line.key, {
                               hasLots,
                               ...(hasLots ? {} : { batchId: '' }),
                             });

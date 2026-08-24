@@ -55,6 +55,7 @@ export interface ProductKitItem {
     id: string;
     batchNumber: string;
     expirationDate?: string;
+    stockLocation?: { id: string; name: string };
   } | null;
 }
 

@@ -130,6 +130,17 @@ export function ExitsPage() {
     }
   }, [isKit, kitDetail, kitLines.length]);
 
+  useEffect(() => {
+    if (!isKit || !kitDetail?.kitItems?.length || originsBusy || watchedOriginId) return;
+    const ids = kitDetail.kitItems
+      .map((ki) => ki.batch?.stockLocation?.id)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0 || !ids.every((id) => id === ids[0])) return;
+    const locId = ids[0];
+    if (!origins.some((o) => o.id === locId)) return;
+    setValue('originLocationId', locId as never);
+  }, [isKit, kitDetail, origins, originsBusy, watchedOriginId, setValue]);
+
   const { lots, hasLots, isLoading: lotsLoading } = useAvailableLots(
     isKit ? undefined : watchedProductId,
     watchedOriginId,
