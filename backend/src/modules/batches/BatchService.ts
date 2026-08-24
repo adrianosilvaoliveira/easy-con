@@ -15,6 +15,7 @@ import {
 import { AuditService } from '../../services/AuditService';
 import { AlertService } from './AlertService';
 import { CACHE_KEYS, memoryCache } from '../../shared/cache/memoryCache';
+import { getPrismaErrorCode } from '../../shared/utils/prismaErrors';
 import { z } from 'zod';
 import { createBatchSchema, updateBatchSchema } from './batches.dto';
 
@@ -571,5 +572,99 @@ export class BatchService {
     });
 
     return batch;
+  }
+
+  /**
+   * Lote equivalente no local (mesmo número). Transferências antigas reutilizavam
+   * o UUID do lote de origem, então o saldo físico pode apontar para outro id.
+   */
+  static async findEquivalentAtLocation(
+    db: Prisma.TransactionClient | typeof prisma,
+    productId: string,
+    locationId: string,
+    batchId: string | null | undefined
+  ): Promise<string | null> {
+    if (!batchId) return null;
+
+    const atLocation = await db.stockItem.findFirst({
+      where: { productId, locationId, batchId },
+      select: { id: true },
+    });
+    if (atLocation) return batchId;
+
+    const preferred = await db.productBatch.findUnique({
+      where: { id: batchId },
+      select: { batchNumber: true, productId: true },
+    });
+    if (!preferred || preferred.productId !== productId) return batchId;
+
+    const equivalent = await db.productBatch.findUnique({
+      where: {
+        productId_stockLocationId_batchNumber: {
+          productId,
+          stockLocationId: locationId,
+          batchNumber: preferred.batchNumber,
+        },
+      },
+      select: { id: true },
+    });
+    return equivalent?.id ?? batchId;
+  }
+
+  /** Garante um lote cadastrado no local de destino, copiando número e validade. */
+  static async ensureAtLocation(
+    tx: Prisma.TransactionClient,
+    originBatchId: string,
+    locationId: string,
+    userId?: string
+  ): Promise<string> {
+    const origin = await tx.productBatch.findUnique({ where: { id: originBatchId } });
+    if (!origin) throw new ValidationError('Lote não encontrado');
+    if (origin.stockLocationId === locationId) return origin.id;
+
+    const existing = await tx.productBatch.findUnique({
+      where: {
+        productId_stockLocationId_batchNumber: {
+          productId: origin.productId,
+          stockLocationId: locationId,
+          batchNumber: origin.batchNumber,
+        },
+      },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+
+    try {
+      const created = await tx.productBatch.create({
+        data: {
+          productId: origin.productId,
+          stockLocationId: locationId,
+          batchNumber: origin.batchNumber,
+          expirationDate: origin.expirationDate,
+          manufacturingDate: origin.manufacturingDate,
+          quantity: 0,
+          supplierId: origin.supplierId,
+          unitCost: origin.unitCost ?? undefined,
+          status: calculateExpirationStatus(origin.expirationDate),
+          createdById: userId ?? origin.createdById,
+        },
+        select: { id: true },
+      });
+      return created.id;
+    } catch (e) {
+      if (getPrismaErrorCode(e) !== 'P2002') throw e;
+      const retry = await tx.productBatch.findUnique({
+        where: {
+          productId_stockLocationId_batchNumber: {
+            productId: origin.productId,
+            stockLocationId: locationId,
+            batchNumber: origin.batchNumber,
+          },
+        },
+        select: { id: true },
+      });
+      if (!retry) throw e;
+      return retry.id;
+    }
   }
 }

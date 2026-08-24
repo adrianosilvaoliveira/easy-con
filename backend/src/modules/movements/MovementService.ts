@@ -160,31 +160,46 @@ export class MovementService {
     locationId: string,
     batchId: string | null | undefined
   ): Promise<string | null> {
-    if (!batchId) return null;
+    return BatchService.findEquivalentAtLocation(prisma, productId, locationId, batchId);
+  }
 
-    const atLocation = await prisma.stockItem.findFirst({
-      where: { productId, locationId, batchId },
-      select: { id: true },
-    });
-    if (atLocation) return batchId;
-
-    const preferred = await prisma.productBatch.findUnique({
-      where: { id: batchId },
-      select: { batchNumber: true, productId: true },
-    });
-    if (!preferred || preferred.productId !== productId) return batchId;
-
-    const equivalent = await prisma.productBatch.findUnique({
-      where: {
-        productId_stockLocationId_batchNumber: {
-          productId,
-          stockLocationId: locationId,
-          batchNumber: preferred.batchNumber,
-        },
-      },
-      select: { id: true },
-    });
-    return equivalent?.id ?? batchId;
+  /** Transfere quantidade criando/reusando o lote no destino (lote é por local). */
+  private static async transferSliceInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      productId: string;
+      originLocationId: string;
+      destinationLocationId: string;
+      originBatchId: string;
+      quantity: number;
+      userId: string;
+    }
+  ) {
+    const destBatchId = await BatchService.ensureAtLocation(
+      tx,
+      params.originBatchId,
+      params.destinationLocationId,
+      params.userId
+    );
+    await this.updateStockInTx(
+      tx,
+      params.productId,
+      params.originLocationId,
+      params.originBatchId,
+      -params.quantity
+    );
+    await this.updateStockInTx(
+      tx,
+      params.productId,
+      params.destinationLocationId,
+      destBatchId,
+      params.quantity
+    );
+    await BatchService.syncBatchQuantity(params.originBatchId, tx);
+    if (destBatchId !== params.originBatchId) {
+      await BatchService.syncBatchQuantity(destBatchId, tx);
+    }
+    return destBatchId;
   }
 
   /** Plano de baixa dos componentes de um kit no local informado. */
@@ -914,21 +929,16 @@ export class MovementService {
     const movementDate = data.movementDate ? new Date(data.movementDate) : new Date();
     const approvedAt = new Date();
     if (data.batchId) {
+      const originBatchId = data.batchId;
       return prisma.$transaction(async (tx) => {
-        await this.updateStockInTx(
-          tx,
-          data.productId,
-          data.originLocationId,
-          data.batchId,
-          -data.quantity
-        );
-        await this.updateStockInTx(
-          tx,
-          data.productId,
-          data.destinationLocationId,
-          data.batchId,
-          data.quantity
-        );
+        await this.transferSliceInTx(tx, {
+          productId: data.productId,
+          originLocationId: data.originLocationId,
+          destinationLocationId: data.destinationLocationId,
+          originBatchId,
+          quantity: data.quantity,
+          userId,
+        });
         return tx.stockMovement.create({
           data: {
             type: 'TRANSFERENCIA',
@@ -975,21 +985,14 @@ export class MovementService {
           },
           include: movementInclude,
         });
-        await this.updateStockInTx(
-          tx,
-          data.productId,
-          data.originLocationId,
-          slice.batchId,
-          -slice.quantity
-        );
-        await this.updateStockInTx(
-          tx,
-          data.productId,
-          data.destinationLocationId,
-          slice.batchId,
-          slice.quantity
-        );
-        await BatchService.syncBatchQuantity(slice.batchId, tx);
+        await this.transferSliceInTx(tx, {
+          productId: data.productId,
+          originLocationId: data.originLocationId,
+          destinationLocationId: data.destinationLocationId,
+          originBatchId: slice.batchId,
+          quantity: slice.quantity,
+          userId,
+        });
         movements.push(mov);
       }
       return { ...movements[0], fefoAllocations: movements };
@@ -1337,21 +1340,16 @@ export class MovementService {
     };
     await this.assertTransferStockAvailable(transferData);
     if (transferData.batchId) {
+      const originBatchId = transferData.batchId;
       return prisma.$transaction(async (tx) => {
-        await this.updateStockInTx(
-          tx,
-          movement.productId,
-          movement.originLocationId!,
-          transferData.batchId,
-          -movement.quantity
-        );
-        await this.updateStockInTx(
-          tx,
-          movement.productId,
-          movement.destinationLocationId!,
-          transferData.batchId,
-          movement.quantity
-        );
+        await this.transferSliceInTx(tx, {
+          productId: movement.productId,
+          originLocationId: movement.originLocationId!,
+          destinationLocationId: movement.destinationLocationId!,
+          originBatchId,
+          quantity: movement.quantity,
+          userId: movement.userId,
+        });
         return tx.stockMovement.update({
           where: { id: movement.id },
           data: {
@@ -1373,21 +1371,14 @@ export class MovementService {
       let first = true;
       let primary = null;
       for (const slice of fefoPlan) {
-        await this.updateStockInTx(
-          tx,
-          movement.productId,
-          movement.originLocationId!,
-          slice.batchId,
-          -slice.quantity
-        );
-        await this.updateStockInTx(
-          tx,
-          movement.productId,
-          movement.destinationLocationId!,
-          slice.batchId,
-          slice.quantity
-        );
-        await BatchService.syncBatchQuantity(slice.batchId, tx);
+        await this.transferSliceInTx(tx, {
+          productId: movement.productId,
+          originLocationId: movement.originLocationId!,
+          destinationLocationId: movement.destinationLocationId!,
+          originBatchId: slice.batchId,
+          quantity: slice.quantity,
+          userId: movement.userId,
+        });
         if (first) {
           primary = await tx.stockMovement.update({
             where: { id: movement.id },
@@ -1570,22 +1561,39 @@ export class MovementService {
         if (!movement.originLocationId || !movement.destinationLocationId) {
           throw new ValidationError('Origem ou destino da transferência não informado');
         }
+        const originBatchId = await BatchService.findEquivalentAtLocation(
+          tx,
+          movement.productId,
+          movement.originLocationId,
+          movement.batchId
+        );
+        const destBatchId = await BatchService.findEquivalentAtLocation(
+          tx,
+          movement.productId,
+          movement.destinationLocationId,
+          movement.batchId
+        );
         await this.updateStockInTx(
           tx,
           movement.productId,
           movement.originLocationId,
-          movement.batchId,
+          originBatchId,
           movement.quantity
         );
         await this.updateStockInTx(
           tx,
           movement.productId,
           movement.destinationLocationId,
-          movement.batchId,
+          destBatchId,
           -movement.quantity
         );
-        if (movement.batchId) {
-          await BatchService.syncBatchQuantity(movement.batchId, tx);
+        if (originBatchId) {
+          await BatchService.syncBatchQuantity(originBatchId, tx);
+          reversedBatchIds.add(originBatchId);
+        }
+        if (destBatchId && destBatchId !== originBatchId) {
+          await BatchService.syncBatchQuantity(destBatchId, tx);
+          reversedBatchIds.add(destBatchId);
         }
       } else {
         throw new ValidationError('Tipo de movimentação não suportado para exclusão');
