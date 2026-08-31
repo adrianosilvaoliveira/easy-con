@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { Trash2, Plus } from 'lucide-react';
 import { ProductSearchSelect, type ProductOption } from '@/components/products/ProductSearchSelect';
 import { useProductBatches } from '@/hooks/queries/useProductBatches';
@@ -17,7 +17,7 @@ export interface KitItemDraft {
 
 interface KitItemsEditorProps {
   items: KitItemDraft[];
-  onChange: (items: KitItemDraft[]) => void;
+  onChange: Dispatch<SetStateAction<KitItemDraft[]>>;
   errors?: string;
 }
 
@@ -34,17 +34,34 @@ function KitItemRow({
   onUpdate: (patch: Partial<KitItemDraft>) => void;
   onRemove: () => void;
 }) {
-  const { data: batchData, isLoading } = useProductBatches(item.componentProductId || undefined);
+  const { data: batchData, isLoading, isError } = useProductBatches(
+    item.componentProductId || undefined
+  );
   const hasLots = batchData?.hasLots ?? false;
 
   useEffect(() => {
-    if (!item.componentProductId || isLoading || !batchData) return;
+    if (!item.componentProductId || isLoading) return;
+    if (isError) {
+      if (item.requiresBatch === undefined && item.batchId) {
+        onUpdate({ requiresBatch: true });
+      }
+      return;
+    }
+    if (!batchData) return;
     if (item.requiresBatch !== hasLots) {
       onUpdate({ requiresBatch: hasLots });
     }
-    // onUpdate é estável o suficiente via closure do map; evita loop por referência
+    // onUpdate usa setState funcional; omitido das deps para não reexecutar a cada render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.componentProductId, item.requiresBatch, hasLots, isLoading, batchData]);
+  }, [
+    item.componentProductId,
+    item.requiresBatch,
+    item.batchId,
+    hasLots,
+    isLoading,
+    isError,
+    batchData,
+  ]);
 
   return (
     <div className="space-y-3 rounded-lg border border-teal-200/80 bg-teal-50/40 p-3 dark:border-teal-800 dark:bg-teal-950/20">
@@ -86,11 +103,11 @@ function KitItemRow({
         />
         {item.componentProductId && (
           <div>
-            <label className="form-label">
-              {hasLots ? 'Lote *' : 'Lote'}
-            </label>
+            <label className="form-label">{hasLots ? 'Lote *' : 'Lote'}</label>
             {isLoading ? (
               <p className="text-xs text-slate-500">Carregando lotes...</p>
+            ) : isError ? (
+              <p className="text-xs text-red-600">Não foi possível carregar os lotes.</p>
             ) : hasLots ? (
               <select
                 className="input-field w-full"
@@ -135,8 +152,8 @@ function KitItemRow({
 
 export function KitItemsEditor({ items, onChange, errors }: KitItemsEditorProps) {
   const addItem = () => {
-    onChange([
-      ...items,
+    onChange((prev) => [
+      ...prev,
       {
         key: crypto.randomUUID(),
         componentProductId: '',
@@ -177,13 +194,11 @@ export function KitItemsEditor({ items, onChange, errors }: KitItemsEditorProps)
             .map((i) => i.batchId)}
           repeatedProduct={
             !!item.componentProductId &&
-            items.some(
-              (i) => i.key !== item.key && i.componentProductId === item.componentProductId
-            )
+            items.some((i) => i.key !== item.key && i.componentProductId === item.componentProductId)
           }
-          onRemove={() => onChange(items.filter((i) => i.key !== item.key))}
+          onRemove={() => onChange((prev) => prev.filter((i) => i.key !== item.key))}
           onUpdate={(patch) =>
-            onChange(items.map((i) => (i.key === item.key ? { ...i, ...patch } : i)))
+            onChange((prev) => prev.map((i) => (i.key === item.key ? { ...i, ...patch } : i)))
           }
         />
       ))}

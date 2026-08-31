@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -78,6 +78,8 @@ export function ProductFormModal({
   const [registrationKind, setRegistrationKind] = useState<RegistrationKind | null>(null);
   const [kitItems, setKitItems] = useState<KitItemDraft[]>(emptyKitItems);
   const [kitItemsError, setKitItemsError] = useState('');
+  const hydratedProductId = useRef<string | null>(null);
+  const lastCreateKind = useRef<RegistrationKind | null>(null);
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -128,12 +130,16 @@ export function ProductFormModal({
 
   useEffect(() => {
     if (!open) {
+      hydratedProductId.current = null;
+      lastCreateKind.current = null;
       setRegistrationKind(null);
       setKitItems(emptyKitItems());
       setKitItemsError('');
       return;
     }
     if (product && isEdit) {
+      if (hydratedProductId.current === product.id) return;
+      hydratedProductId.current = product.id;
       const kind = (product.productType as RegistrationKind) || 'PRODUCT';
       setRegistrationKind(kind);
       reset({
@@ -149,23 +155,28 @@ export function ProductFormModal({
       setActive(product.active ?? true);
       if (kind === 'KIT' && product.kitItems?.length) {
         setKitItems(
-          product.kitItems.map((ki) => ({
-            key: ki.id,
-            componentProductId: ki.componentProductId || ki.componentProduct.id,
-            product: {
-              id: ki.componentProduct.id,
-              name: ki.componentProduct.name,
-              internalCode: ki.componentProduct.internalCode,
-              barcode: ki.componentProduct.barcode,
-            },
-            quantity: ki.quantity,
-            batchId: ki.batchId || ki.batch?.id || '',
-          }))
+          product.kitItems.map((ki) => {
+            const batchId = ki.batchId || ki.batch?.id || '';
+            return {
+              key: ki.id,
+              componentProductId: ki.componentProductId || ki.componentProduct.id,
+              product: {
+                id: ki.componentProduct.id,
+                name: ki.componentProduct.name,
+                internalCode: ki.componentProduct.internalCode,
+                barcode: ki.componentProduct.barcode,
+              },
+              quantity: ki.quantity,
+              batchId,
+              requiresBatch: batchId ? true : undefined,
+            };
+          })
         );
       }
       return;
     }
-    if (!isEdit && registrationKind) {
+    if (!isEdit && registrationKind && lastCreateKind.current !== registrationKind) {
+      lastCreateKind.current = registrationKind;
       reset({
         unit: registrationKind === 'KIT' ? 'KIT' : 'UN',
         minQuantity: 0,
@@ -229,13 +240,13 @@ export function ProductFormModal({
         setKitItemsError('Informe a quantidade de cada item');
         return false;
       }
-      if (item.requiresBatch === undefined) {
-        setKitItemsError('Aguarde o carregamento dos lotes dos produtos');
-        return false;
-      }
       const label = item.product?.name
         ? formatProductName(item.product.name)
         : 'um dos produtos';
+      if (!item.batchId && item.requiresBatch === undefined) {
+        setKitItemsError('Aguarde o carregamento dos lotes dos produtos');
+        return false;
+      }
       if (item.requiresBatch && !item.batchId) {
         setKitItemsError(`Selecione o lote de "${label}"`);
         return false;
@@ -320,6 +331,7 @@ export function ProductFormModal({
                   variant="secondary"
                   type="button"
                   onClick={() => {
+                    lastCreateKind.current = null;
                     setRegistrationKind(null);
                     setKitItems(emptyKitItems());
                   }}
