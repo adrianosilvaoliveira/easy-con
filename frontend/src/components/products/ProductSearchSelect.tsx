@@ -20,6 +20,7 @@ export interface ProductOption {
   barcode?: string | null;
   productType?: ProductType;
   active?: boolean;
+  totalStock?: number;
 }
 
 interface ProductSearchSelectProps {
@@ -34,6 +35,21 @@ interface ProductSearchSelectProps {
   excludeKits?: boolean;
   /** Filtra por tipo (ex.: só kits na montagem) */
   productType?: ProductType;
+  /** Só lista produtos com saldo em estoque (saída/transferência) */
+  inStock?: boolean;
+  /** Mantém kits na lista mesmo sem estoque próprio (saída de kit virtual) */
+  includeZeroStockKits?: boolean;
+}
+
+function isSelectableForStock(
+  product: ProductOption,
+  inStock: boolean,
+  includeZeroStockKits: boolean
+) {
+  if (product.active === false) return false;
+  if (!inStock) return true;
+  if (includeZeroStockKits && product.productType === 'KIT') return true;
+  return (product.totalStock ?? 0) > 0;
 }
 
 function normalize(text: string) {
@@ -68,6 +84,8 @@ export function ProductSearchSelect({
   allowCreate = true,
   excludeKits = false,
   productType,
+  inStock = false,
+  includeZeroStockKits = false,
 }: ProductSearchSelectProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -77,7 +95,14 @@ export function ProductSearchSelect({
   const debouncedQuery = useDebounce(query, 300);
 
   const { data: products = [], isFetching } = useQuery({
-    queryKey: ['products-search', debouncedQuery, excludeKits, productType],
+    queryKey: [
+      'products-search',
+      debouncedQuery,
+      excludeKits,
+      productType,
+      inStock,
+      includeZeroStockKits,
+    ],
     queryFn: () =>
       api
         .get('/products', {
@@ -86,10 +111,14 @@ export function ProductSearchSelect({
             limit: 40,
             excludeKits: excludeKits ? 'true' : undefined,
             productType: productType || undefined,
+            inStock: inStock ? 'true' : undefined,
+            includeZeroStockKits: includeZeroStockKits ? 'true' : undefined,
           },
         })
         .then((r) =>
-          (r.data.data as ProductOption[]).filter((p) => p.active !== false)
+          (r.data.data as ProductOption[]).filter((p) =>
+            isSelectableForStock(p, inStock, includeZeroStockKits)
+          )
         ),
     enabled: open || !!debouncedQuery,
     staleTime: 30_000,
@@ -129,6 +158,7 @@ export function ProductSearchSelect({
   }, []);
 
   const handleSelect = (product: ProductOption) => {
+    if (!isSelectableForStock(product, inStock, includeZeroStockKits)) return;
     setSelected(product);
     setQuery(`${product.internalCode} — ${formatProductName(product.name)}`);
     onChange(product.id, product);
@@ -152,7 +182,13 @@ export function ProductSearchSelect({
       name: product.name,
       internalCode: product.internalCode,
       productType: product.productType,
+      active: true,
+      totalStock: 0,
     };
+    if (!isSelectableForStock(option, inStock, includeZeroStockKits)) {
+      setProductModalOpen(false);
+      return;
+    }
     handleSelect(option);
   };
 
@@ -220,7 +256,9 @@ export function ProductSearchSelect({
               <li className="px-3 py-3 text-center text-sm text-slate-500 dark:text-slate-400">
                 {query.trim() ? (
                   <>
-                    Nenhum produto encontrado
+                    {inStock
+                      ? 'Nenhum produto ativo com estoque disponível'
+                      : 'Nenhum produto encontrado'}
                     {allowCreate && (
                       <button
                         type="button"
@@ -235,12 +273,20 @@ export function ProductSearchSelect({
                     )}
                   </>
                 ) : (
-                  'Digite para buscar produtos'
+                  inStock
+                    ? 'Digite para buscar produtos com estoque'
+                    : 'Digite para buscar produtos'
                 )}
               </li>
             ) : (
               ranked.map((p) => {
                 const isKit = p.productType === 'KIT';
+                const stockLabel =
+                  isKit && includeZeroStockKits
+                    ? null
+                    : typeof p.totalStock === 'number'
+                      ? `${p.totalStock} un.`
+                      : null;
                 return (
                   <li key={p.id}>
                     <button
@@ -259,6 +305,7 @@ export function ProductSearchSelect({
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         {p.internalCode}
                         {p.barcode ? ` · ${p.barcode}` : ''}
+                        {stockLabel ? ` · ${stockLabel}` : ''}
                       </span>
                     </button>
                   </li>

@@ -23,10 +23,14 @@ interface KitItemsEditorProps {
 
 function KitItemRow({
   item,
+  usedBatchIds,
+  repeatedProduct,
   onUpdate,
   onRemove,
 }: {
   item: KitItemDraft;
+  usedBatchIds: string[];
+  repeatedProduct: boolean;
   onUpdate: (patch: Partial<KitItemDraft>) => void;
   onRemove: () => void;
 }) {
@@ -96,13 +100,14 @@ function KitItemRow({
               >
                 <option value="">Selecione o lote *</option>
                 {batchData?.batches.map((b) => (
-                  <option key={b.id} value={b.id}>
+                  <option key={b.id} value={b.id} disabled={usedBatchIds.includes(b.id)}>
                     {b.batchNumber}
                     {b.expirationDate
                       ? ` · val. ${new Date(b.expirationDate).toLocaleDateString('pt-BR')}`
                       : ''}
                     {b.location ? ` · ${b.location.name}` : ''}
                     {` (${b.quantity} un.)`}
+                    {usedBatchIds.includes(b.id) ? ' — já no kit' : ''}
                   </option>
                 ))}
               </select>
@@ -114,6 +119,11 @@ function KitItemRow({
           </div>
         )}
       </div>
+      {repeatedProduct && hasLots && (
+        <p className="text-xs text-teal-700 dark:text-teal-300">
+          Este produto já está no kit — selecione um lote diferente.
+        </p>
+      )}
       {item.product && (
         <p className="text-xs text-slate-500">
           {formatProductName(item.product.name)} · {item.product.internalCode}
@@ -144,7 +154,8 @@ export function KitItemsEditor({ items, onChange, errors }: KitItemsEditorProps)
             Produtos do kit *
           </h3>
           <p className="text-xs text-slate-500">
-            Mínimo de 2 produtos. Informe o lote de cada item — ele fica gravado para montagem e saída.
+            Mínimo de 2 itens. O mesmo produto pode entrar mais de uma vez, desde que o lote seja
+            diferente.
           </p>
         </div>
         <Button type="button" variant="secondary" size="sm" onClick={addItem}>
@@ -156,6 +167,20 @@ export function KitItemsEditor({ items, onChange, errors }: KitItemsEditorProps)
         <KitItemRow
           key={item.key}
           item={item}
+          usedBatchIds={items
+            .filter(
+              (i) =>
+                i.key !== item.key &&
+                i.componentProductId === item.componentProductId &&
+                i.batchId
+            )
+            .map((i) => i.batchId)}
+          repeatedProduct={
+            !!item.componentProductId &&
+            items.some(
+              (i) => i.key !== item.key && i.componentProductId === item.componentProductId
+            )
+          }
           onRemove={() => onChange(items.filter((i) => i.key !== item.key))}
           onUpdate={(patch) =>
             onChange(items.map((i) => (i.key === item.key ? { ...i, ...patch } : i)))

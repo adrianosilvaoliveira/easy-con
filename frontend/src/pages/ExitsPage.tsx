@@ -204,6 +204,10 @@ export function ExitsPage() {
   });
 
   const onSubmit = (data: ExitForm) => {
+    if (!isKit && selectedProduct && (selectedProduct.totalStock ?? 0) <= 0) {
+      setError('productId', { message: 'Produto com estoque zerado não pode ser movimentado' });
+      return;
+    }
     if (!isKit && hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
@@ -214,6 +218,7 @@ export function ExitsPage() {
         return;
       }
       const kitQty = Math.max(1, Number(data.quantity) || 1);
+      const seen = new Set<string>();
       for (const line of kitLines) {
         if (!line.componentProductId) {
           setKitLinesError('Há produtos inválidos na lista');
@@ -223,6 +228,14 @@ export function ExitsPage() {
           setKitLinesError(`Selecione o lote de "${formatProductName(line.name)}"`);
           return;
         }
+        const key = `${line.componentProductId}:${line.batchId || 'none'}`;
+        if (seen.has(key)) {
+          setKitLinesError(
+            `"${formatProductName(line.name)}" está repetido com o mesmo lote. Altere o lote ou some as quantidades na mesma linha.`
+          );
+          return;
+        }
+        seen.add(key);
       }
       setKitLinesError('');
       mutation.mutate({
@@ -320,6 +333,9 @@ export function ExitsPage() {
                   }}
                   error={errors.productId?.message}
                   required
+                  inStock
+                  includeZeroStockKits
+                  allowCreate={false}
                 />
               )}
             />

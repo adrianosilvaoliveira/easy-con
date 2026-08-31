@@ -45,7 +45,7 @@ const kitInclude = {
 
 async function validateKitItems(items: KitItemDTO[] | undefined) {
   if (!items || items.length < 2) {
-    throw new ValidationError('O kit deve conter pelo menos dois produtos');
+    throw new ValidationError('O kit deve conter pelo menos dois itens');
   }
 
   const seen = new Set<string>();
@@ -60,9 +60,9 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
     batchIds.length
       ? prisma.productBatch.findMany({
           where: { id: { in: batchIds } },
-          select: { id: true, productId: true },
+          select: { id: true, productId: true, batchNumber: true },
         })
-      : Promise.resolve([] as { id: string; productId: string }[]),
+      : Promise.resolve([] as { id: string; productId: string; batchNumber: string }[]),
     prisma.productBatch.findMany({
       where: { productId: { in: componentIds } },
       distinct: ['productId'],
@@ -75,12 +75,6 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
   const lotProductIds = new Set(productsWithLots.map((b) => b.productId));
 
   for (const item of items) {
-    const key = `${item.componentProductId}:${item.batchId ?? 'none'}`;
-    if (seen.has(key)) {
-      throw new ValidationError('Há produtos/lotes duplicados no kit');
-    }
-    seen.add(key);
-
     const component = componentMap.get(item.componentProductId);
     if (!component || !component.active) {
       throw new ValidationError('Produto componente inválido ou inativo');
@@ -88,6 +82,18 @@ async function validateKitItems(items: KitItemDTO[] | undefined) {
     if (component.productType === 'KIT') {
       throw new ValidationError(`"${component.name}" é um kit e não pode compor outro kit`);
     }
+
+    const lotKey = item.batchId
+      ? `${item.componentProductId}:${(batchMap.get(item.batchId)?.batchNumber ?? item.batchId).trim().toLowerCase()}`
+      : `${item.componentProductId}:none`;
+    if (seen.has(lotKey)) {
+      throw new ValidationError(
+        item.batchId
+          ? `"${component.name}" já está no kit com este lote. Inclua novamente apenas com outro lote.`
+          : `"${component.name}" já está no kit. Produtos sem lote não podem se repetir.`
+      );
+    }
+    seen.add(lotKey);
 
     if (lotProductIds.has(item.componentProductId) && !item.batchId) {
       throw new ValidationError(
@@ -143,6 +149,23 @@ export class ProductService {
       where.productType = filters.productType;
     } else if (filters.excludeKits === 'true') {
       where.productType = 'PRODUCT';
+    }
+
+    if (filters.inStock === 'true') {
+      const withStock: Prisma.ProductWhereInput = {
+        stockItems: { some: { quantity: { gt: 0 } } },
+      };
+      if (filters.includeZeroStockKits === 'true') {
+        const stockOrKit: Prisma.ProductWhereInput = {
+          OR: [withStock, { productType: 'KIT' }],
+        };
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          stockOrKit,
+        ];
+      } else {
+        where.stockItems = withStock.stockItems;
+      }
     }
 
     if (filters.expiringDays) {

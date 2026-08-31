@@ -28,23 +28,25 @@ function itemKey(item: Pick<LabelItem, 'barcode' | 'internalCode' | 'productId'>
 }
 
 function kitContentsFromProduct(product: Product): KitContentLine[] {
-  const byProduct = new Map<string, KitContentLine>();
+  const byLine = new Map<string, KitContentLine>();
   for (const ki of product.kitItems ?? []) {
     const component = ki.componentProduct;
     if (!component?.name) continue;
     const id = ki.componentProductId || component.id;
-    const prev = byProduct.get(id);
+    const lot = ki.batch?.batchNumber || '';
+    const key = `${id}:${lot}`;
+    const prev = byLine.get(key);
     if (prev) {
       prev.quantity += ki.quantity;
     } else {
-      byProduct.set(id, {
-        name: component.name,
+      byLine.set(key, {
+        name: lot ? `${component.name} (lote ${lot})` : component.name,
         quantity: ki.quantity,
         internalCode: component.internalCode,
       });
     }
   }
-  return Array.from(byProduct.values());
+  return Array.from(byLine.values());
 }
 
 async function enrichKitLabels(items: LabelItem[]): Promise<LabelItem[]> {

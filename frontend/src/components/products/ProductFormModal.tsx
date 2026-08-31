@@ -220,9 +220,10 @@ export function ProductFormModal({
   const validateKitDraft = (): boolean => {
     const filled = kitItems.filter((i) => i.componentProductId);
     if (filled.length < 2) {
-      setKitItemsError('Inclua pelo menos dois produtos no kit');
+      setKitItemsError('Inclua pelo menos dois itens no kit');
       return false;
     }
+    const seen = new Set<string>();
     for (const item of filled) {
       if (!item.quantity || item.quantity < 1) {
         setKitItemsError('Informe a quantidade de cada item');
@@ -232,13 +233,23 @@ export function ProductFormModal({
         setKitItemsError('Aguarde o carregamento dos lotes dos produtos');
         return false;
       }
+      const label = item.product?.name
+        ? formatProductName(item.product.name)
+        : 'um dos produtos';
       if (item.requiresBatch && !item.batchId) {
-        const label = item.product?.name
-          ? formatProductName(item.product.name)
-          : 'um dos produtos';
         setKitItemsError(`Selecione o lote de "${label}"`);
         return false;
       }
+      const key = `${item.componentProductId}:${item.batchId || 'none'}`;
+      if (seen.has(key)) {
+        setKitItemsError(
+          item.batchId
+            ? `"${label}" já está no kit com este lote. Inclua de novo apenas com outro lote.`
+            : `"${label}" já está no kit. Produtos sem lote não podem se repetir.`
+        );
+        return false;
+      }
+      seen.add(key);
     }
     setKitItemsError('');
     return true;

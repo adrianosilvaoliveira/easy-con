@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { ProductSearchSelect, type ProductOption } from '@/components/products/ProductSearchSelect';
 import { KitBadge } from '@/components/products/ProductTypeSelect';
@@ -41,6 +41,7 @@ function ComponentLotSelect({
   onChange,
   onLotsResolved,
   required,
+  excludeBatchIds,
 }: {
   productId: string;
   locationId?: string;
@@ -50,6 +51,7 @@ function ComponentLotSelect({
   onChange: (batchId: string) => void;
   onLotsResolved?: (hasLots: boolean) => void;
   required: boolean;
+  excludeBatchIds?: string[];
 }) {
   const { lots, hasLots, isLoading } = useAvailableLots(productId, locationId, !!productId && !!locationId);
 
@@ -68,13 +70,14 @@ function ComponentLotSelect({
       (preferredBatchNumber
         ? lots.find((l) => l.batchNumber === preferredBatchNumber)?.batchId
         : undefined);
+    const taken = new Set(excludeBatchIds ?? []);
     const valueInLots = Boolean(value && lots.some((l) => l.batchId === value));
     if (preferred && !valueInLots && preferred !== value) {
-      onChange(preferred);
+      if (!taken.has(preferred)) onChange(preferred);
       return;
     }
     if (valueInLots) return;
-    if (!value && lots.length === 1) {
+    if (!value && lots.length === 1 && !taken.has(lots[0].batchId)) {
       onChange(lots[0].batchId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,10 +136,15 @@ function ComponentLotSelect({
               : 'Selecione o lote...'}
         </option>
         {lots.map((lot) => (
-          <option key={lot.batchId} value={lot.batchId}>
+          <option
+            key={lot.batchId}
+            value={lot.batchId}
+            disabled={excludeBatchIds?.includes(lot.batchId)}
+          >
             {lot.batchNumber}
             {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
             {` (${lot.quantity} un.)`}
+            {excludeBatchIds?.includes(lot.batchId) ? ' — já na lista' : ''}
           </option>
         ))}
       </select>
@@ -170,11 +178,6 @@ export function KitExitEditor({
 
       // Remove auto-init interno do editor (pai controla via resetKitLinesFromDetail)
 
-  const usedIds = useMemo(
-    () => new Set(lines.map((l) => l.componentProductId).filter(Boolean)),
-    [lines]
-  );
-
   const updateLine = (key: string, patch: Partial<KitExitLine>) => {
     onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   };
@@ -185,8 +188,8 @@ export function KitExitEditor({
 
   const addProduct = (id: string, product?: ProductOption) => {
     if (!id || !product) return;
-    if (usedIds.has(id)) return;
     if (product.productType === 'KIT') return;
+    if (typeof product.totalStock === 'number' && product.totalStock <= 0) return;
     onChange([
       ...lines,
       {
@@ -212,8 +215,8 @@ export function KitExitEditor({
             <KitBadge /> Editar composição desta saída
           </p>
           <p className="mt-1 text-xs text-teal-800 dark:text-teal-200">
-            Inclua ou remova produtos. Os lotes gravados na composição são usados automaticamente.
-            A quantidade por produto é multiplicada pela quantidade de kits ({qtyKits}).
+            Inclua ou remova produtos. O mesmo produto pode aparecer mais de uma vez com lotes
+            diferentes. A quantidade por produto é multiplicada pela quantidade de kits ({qtyKits}).
           </p>
         </div>
         <Button type="button" variant="secondary" size="sm" onClick={() => setAdding(true)}>
@@ -228,6 +231,7 @@ export function KitExitEditor({
             label="Produto a incluir"
             excludeKits
             allowCreate={false}
+            inStock
             onChange={addProduct}
           />
           <div className="mt-2 flex justify-end">
@@ -281,6 +285,14 @@ export function KitExitEditor({
                   value={line.batchId}
                   preferredBatchId={line.preferredBatchId}
                   preferredBatchNumber={line.preferredBatchNumber}
+                  excludeBatchIds={lines
+                    .filter(
+                      (l) =>
+                        l.key !== line.key &&
+                        l.componentProductId === line.componentProductId &&
+                        l.batchId
+                    )
+                    .map((l) => l.batchId)}
                   required={!!line.hasLots}
                   onChange={(batchId) => updateLine(line.key, { batchId })}
                   onLotsResolved={(hasLots) => {

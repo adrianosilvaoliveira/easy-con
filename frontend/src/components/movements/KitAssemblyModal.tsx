@@ -42,6 +42,7 @@ function ComponentLotSelect({
   onChange,
   onLotsResolved,
   requiredQty,
+  excludeBatchIds,
 }: {
   productId: string;
   locationId?: string;
@@ -51,6 +52,7 @@ function ComponentLotSelect({
   onChange: (batchId: string) => void;
   onLotsResolved?: (hasLots: boolean) => void;
   requiredQty: number;
+  excludeBatchIds?: string[];
 }) {
   const { lots, hasLots, isLoading } = useAvailableLots(
     productId,
@@ -73,13 +75,14 @@ function ComponentLotSelect({
       (preferredBatchNumber
         ? lots.find((l) => l.batchNumber === preferredBatchNumber)?.batchId
         : undefined);
+    const taken = new Set(excludeBatchIds ?? []);
     const valueInLots = Boolean(value && lots.some((l) => l.batchId === value));
     if (preferred && (!valueInLots) && preferred !== value) {
-      onChange(preferred);
+      if (!taken.has(preferred)) onChange(preferred);
       return;
     }
     if (valueInLots) return;
-    if (!value && lots.length === 1) {
+    if (!value && lots.length === 1 && !taken.has(lots[0].batchId)) {
       onChange(lots[0].batchId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,10 +141,17 @@ function ComponentLotSelect({
               : 'Selecione o lote...'}
         </option>
         {lots.map((lot) => (
-          <option key={lot.batchId} value={lot.batchId} disabled={lot.quantity < requiredQty}>
+          <option
+            key={lot.batchId}
+            value={lot.batchId}
+            disabled={
+              lot.quantity < requiredQty || Boolean(excludeBatchIds?.includes(lot.batchId))
+            }
+          >
             {lot.batchNumber}
             {lot.expirationDate ? ` — Val. ${formatDate(lot.expirationDate)}` : ''}
             {` (${lot.quantity} un.)`}
+            {excludeBatchIds?.includes(lot.batchId) ? ' — já na lista' : ''}
           </option>
         ))}
       </select>
@@ -290,6 +300,17 @@ export function KitAssemblyModal({
         setFormError(`Selecione o lote de "${formatProductName(line.name)}"`);
         return;
       }
+    }
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const key = `${line.componentProductId}:${line.batchId || 'none'}`;
+      if (seen.has(key)) {
+        setFormError(
+          `"${formatProductName(line.name)}" está repetido com o mesmo lote. Altere o lote.`
+        );
+        return;
+      }
+      seen.add(key);
     }
     setFormError('');
     mutation.mutate({
@@ -445,6 +466,14 @@ export function KitAssemblyModal({
                         preferredBatchId={line.preferredBatchId}
                         preferredBatchNumber={line.preferredBatchNumber}
                         requiredQty={need}
+                        excludeBatchIds={lines
+                          .filter(
+                            (l) =>
+                              l.key !== line.key &&
+                              l.componentProductId === line.componentProductId &&
+                              l.batchId
+                          )
+                          .map((l) => l.batchId)}
                         onChange={(batchId) => updateLine(line.key, { batchId })}
                         onLotsResolved={(hasLots) => {
                           if (line.hasLots !== hasLots) {

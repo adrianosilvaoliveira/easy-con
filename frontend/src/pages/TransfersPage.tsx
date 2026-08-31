@@ -145,6 +145,10 @@ export function TransfersPage() {
   });
 
   const onSubmit = (data: TransferForm) => {
+    if (!originsLoading && originOptions.length === 0) {
+      setError('productId', { message: 'Produto com estoque zerado não pode ser movimentado' });
+      return;
+    }
     if (hasLots && !data.batchId) {
       setError('batchId', { message: 'Selecione o lote para a movimentação' });
       return;
@@ -206,6 +210,8 @@ export function TransfersPage() {
                   }}
                   error={errors.productId?.message}
                   required
+                  inStock
+                  allowCreate={false}
                 />
               )}
             />

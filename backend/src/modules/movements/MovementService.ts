@@ -64,6 +64,16 @@ export class MovementService {
     }
     return product;
   }
+
+  private static async assertProductHasStock(productId: string) {
+    const total = await prisma.stockItem.aggregate({
+      where: { productId, quantity: { gt: 0 } },
+      _sum: { quantity: true },
+    });
+    if ((total._sum.quantity ?? 0) <= 0) {
+      throw new ValidationError('Produto com estoque zerado não pode ser movimentado');
+    }
+  }
   private static async updateStock(
     productId: string,
     locationId: string,
@@ -231,9 +241,12 @@ export class MovementService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    const recipeBatchByComponent = new Map(
-      kitItems.map((item) => [item.componentProductId, item.batchId])
-    );
+    const recipeBatchesByComponent = new Map<string, Array<string | null>>();
+    for (const item of kitItems) {
+      const list = recipeBatchesByComponent.get(item.componentProductId) ?? [];
+      list.push(item.batchId);
+      recipeBatchesByComponent.set(item.componentProductId, list);
+    }
 
     let lines: Line[];
 
@@ -250,10 +263,18 @@ export class MovementService {
         if (component.productType === 'KIT') {
           throw new ValidationError(`"${component.name}" é um kit e não pode ser componente da saída`);
         }
+        const remaining = recipeBatchesByComponent.get(component.id);
+        let batchId = row.batchId || null;
+        if (batchId && remaining) {
+          const idx = remaining.findIndex((id) => id === batchId);
+          if (idx >= 0) remaining.splice(idx, 1);
+        } else if (!batchId && remaining && remaining.length > 0) {
+          batchId = remaining.shift() ?? null;
+        }
         lines.push({
           componentProductId: component.id,
           quantity: row.quantity,
-          batchId: row.batchId || recipeBatchByComponent.get(component.id) || null,
+          batchId,
           name: component.name,
         });
       }
@@ -271,6 +292,17 @@ export class MovementService {
 
     if (lines.length < 1) {
       throw new ValidationError('Informe ao menos um produto para a saída do kit');
+    }
+
+    const seenLines = new Set<string>();
+    for (const item of lines) {
+      const key = `${item.componentProductId}:${item.batchId ?? 'none'}`;
+      if (seenLines.has(key)) {
+        throw new ValidationError(
+          `"${item.name}" está repetido com o mesmo lote. Altere o lote ou some as quantidades na mesma linha.`
+        );
+      }
+      seenLines.add(key);
     }
 
     const plan: Slice[] = [];
@@ -774,6 +806,9 @@ export class MovementService {
 
   static async createExit(data: ExitDTO, userId: string, roleName?: RoleName) {
     const product = await this.requireActiveProduct(data.productId);
+    if (product.productType !== 'KIT') {
+      await this.assertProductHasStock(data.productId);
+    }
 
     if (product.productType === 'KIT') {
       if (data.batchId) {
@@ -904,6 +939,7 @@ export class MovementService {
   }
   static async createTransfer(data: TransferDTO, userId: string, roleName?: RoleName) {
     await this.requireActiveProduct(data.productId);
+    await this.assertProductHasStock(data.productId);
     await this.assertTransferStockAvailable(data);
     if (this.requiresApproval(roleName)) {
       return prisma.stockMovement.create({

@@ -57,4 +57,6 @@ export const listProductsSchema = z.object({
   expiringDays: z.string().optional(),
   productType: z.string().optional(),
   excludeKits: z.string().optional(),
+  inStock: z.string().optional(),
+  includeZeroStockKits: z.string().optional(),
 });
