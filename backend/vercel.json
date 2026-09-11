@@ -6,7 +6,7 @@
   "functions": {
     "api/cron/expiration.ts": {
       "maxDuration": 60,
-      "includeFiles": "prisma/**"
+      "includeFiles": "{prisma/**,node_modules/@prisma/**,node_modules/.prisma/**}"
     }
   }
 }

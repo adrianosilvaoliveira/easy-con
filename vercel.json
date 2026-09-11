@@ -9,10 +9,12 @@
       "root": "backend/",
       "entrypoint": "src/index.mjs",
       "framework": "express",
-      "includeFiles": [
-        "node_modules/@prisma/**",
-        "node_modules/.prisma/**"
-      ]
+      "functions": {
+        "src/index.mjs": {
+          "includeFiles": "{node_modules/@prisma/**,node_modules/.prisma/**,prisma/**}",
+          "maxDuration": 60
+        }
+      }
     }
   },
   "rewrites": [
