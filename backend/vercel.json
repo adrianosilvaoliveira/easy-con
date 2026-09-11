@@ -8,11 +8,5 @@
       "maxDuration": 60,
       "includeFiles": "prisma/**"
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/expiration",
-      "schedule": "0 6 * * *"
-    }
-  ]
+  }
 }

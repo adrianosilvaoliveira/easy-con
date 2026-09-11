@@ -1,19 +1,29 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "experimentalServices": {
+  "services": {
     "frontend": {
-      "entrypoint": "frontend",
-      "routePrefix": "/",
+      "root": "frontend/",
       "framework": "vite"
     },
     "backend": {
-      "entrypoint": "backend/src/index.mjs",
-      "routePrefix": "/_/backend",
+      "root": "backend/",
+      "entrypoint": "src/index.mjs",
       "framework": "express",
       "includeFiles": [
-        "backend/node_modules/@prisma/**",
-        "backend/node_modules/.prisma/**"
+        "node_modules/@prisma/**",
+        "node_modules/.prisma/**"
       ]
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/_/backend/(.*)", "destination": { "service": "backend" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/expiration",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }

@@ -13,6 +13,22 @@ import { apiRoutes } from './routes';
 import { errorHandler } from './middlewares/errorHandler';
 import { logger } from './shared/logger';
 const isVercel = !!process.env.VERCEL;
+const BACKEND_MOUNT_PREFIX = '/_/backend';
+
+/** Na Vercel o serviço pode receber `/_/backend/api/...`; o Express escuta em `/api`. */
+function stripBackendMountPrefix(
+  req: express.Request,
+  _res: express.Response,
+  next: express.NextFunction
+) {
+  const url = req.url || '';
+  if (url === BACKEND_MOUNT_PREFIX || url.startsWith(`${BACKEND_MOUNT_PREFIX}/`) || url.startsWith(`${BACKEND_MOUNT_PREFIX}?`)) {
+    const stripped = url.slice(BACKEND_MOUNT_PREFIX.length);
+    req.url = stripped.startsWith('/') || stripped.startsWith('?') ? stripped : `/${stripped}`;
+    if (!req.url) req.url = '/';
+  }
+  next();
+}
 
 export function createApp(): Express {
   if (!isVercel) {
@@ -25,6 +41,8 @@ export function createApp(): Express {
   if (isVercel) {
     app.set('trust proxy', 1);
   }
+
+  app.use(stripBackendMountPrefix);
 
   app.use(
     env.NODE_ENV === 'production'

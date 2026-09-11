@@ -159,12 +159,12 @@ Após atualizar o schema, execute `npx prisma migrate deploy` e `npx prisma db s
 
 ## Deploy na Vercel
 
-O repositório está preparado para **dois serviços** no mesmo projeto (recurso experimental da Vercel), definidos em `vercel.json` na raiz:
+O repositório está preparado para **dois serviços** no mesmo projeto Vercel, definidos em `vercel.json` na raiz:
 
-| Serviço | Pasta | Rota |
-|---------|-------|------|
+| Serviço | Pasta | Rota pública |
+|---------|-------|----------------|
 | Frontend (Vite) | `frontend/` | `/` |
-| Backend (Express serverless) | `backend/` | `/_/backend` |
+| Backend (Express) | `backend/` | `/api` (e `/_/backend` por compatibilidade) |
 
 ### 1. Banco de dados — Supabase (PostgreSQL)
 
@@ -209,7 +209,7 @@ Copie `backend/.env.example` → `backend/.env` (`DATABASE_URL` e `DIRECT_URL` i
 
 1. Conecte o repositório GitHub.
 2. Confirme que o **Root Directory** é `./` (raiz do monorepo).
-3. A Vercel deve detectar `vercel.json` e pedir o layout com **frontend** + **backend**.
+3. Em **Framework Preset**, use **Services** (não Vite isolado). Sem isso, só o front sobe e `/api` devolve HTML.
 
 ### 3. Variáveis de ambiente (serviço **backend**)
 
@@ -228,7 +228,7 @@ O build do backend executa `prisma migrate deploy` (`vercel-build`). Na primeira
 
 ### 4. Frontend
 
-A Vercel injeta `VITE_BACKEND_URL=/_/backend` no build do frontend. O app monta a API em `/_/backend/api` automaticamente. Em desenvolvimento local (servidor unificado), o padrão continua `/api` — configure `frontend/.env` conforme `.env.example`.
+O build de produção usa `frontend/.env.production` (`VITE_API_URL=/api`). Em desenvolvimento local (servidor unificado), o padrão continua `/api` — configure `frontend/.env` conforme `.env.example`.
 
 ### 5. Cron de vencimentos
 
@@ -237,8 +237,8 @@ Agendado em `backend/vercel.json` (diário às 06:00 UTC). A Vercel envia `Autho
 ### 6. Verificação pós-deploy
 
 - UI: `https://<seu-projeto>.vercel.app`
-- Health: `https://<seu-projeto>.vercel.app/_/backend/api/health`
-- Swagger: `https://<seu-projeto>.vercel.app/_/backend/api/docs`
+- Health: `https://<seu-projeto>.vercel.app/api/health`
+- Swagger: `https://<seu-projeto>.vercel.app/api/docs`
 
 ### 7. Observabilidade
 

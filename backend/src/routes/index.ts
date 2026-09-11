@@ -12,6 +12,7 @@ import { supplierRoutes } from './supplier.routes';
 import { batchesRoutes } from './batches.routes';
 import { organizationRoutes } from './organization.routes';
 import { prisma } from '../database/prisma';
+import { BatchService } from '../modules/batches/BatchService';
 
 const router = Router();
 
@@ -27,6 +28,28 @@ router.use('/audit', auditRoutes);
 router.use('/suppliers', supplierRoutes);
 router.use('/batches', batchesRoutes);
 router.use('/organization', organizationRoutes);
+
+router.get('/cron/expiration', async (req, res, next) => {
+  try {
+    const auth = req.headers.authorization;
+    const secret = process.env.CRON_SECRET;
+
+    if (process.env.NODE_ENV === 'production' && !secret) {
+      res.status(500).json({ success: false, message: 'Cron não configurado' });
+      return;
+    }
+
+    if (secret && auth !== `Bearer ${secret}`) {
+      res.status(401).json({ success: false, message: 'Não autorizado' });
+      return;
+    }
+
+    const result = await BatchService.runExpirationJob();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
