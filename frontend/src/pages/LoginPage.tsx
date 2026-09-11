@@ -26,16 +26,24 @@ export function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
-      api.post<{ success: boolean; data: AuthResponse }>('/auth/login', data),
+      api.post<{ success: boolean; data: AuthResponse }>('/auth/login', {
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
+      }),
     onSuccess: ({ data }) => {
-      const { accessToken, refreshToken, user } = data.data;
-      setAuth(accessToken, refreshToken, user);
+      const payload = data?.data;
+      if (!payload?.accessToken || !payload?.user?.id) {
+        toast.error('Resposta de login inválida. Tente novamente.');
+        return;
+      }
+      setAuth(payload.accessToken, payload.refreshToken, payload.user);
       toast.success('Bem-vindo!');
       navigate('/');
     },
     onError: (err: unknown) => {
       const ax = err as {
         code?: string;
+        message?: string;
         response?: { status?: number; data?: { message?: string; code?: string } };
       };
       if (ax.code === 'ECONNABORTED') {
@@ -44,8 +52,12 @@ export function LoginPage() {
       }
       const status = ax.response?.status;
       const msg = ax.response?.data?.message;
+      if (!ax.response) {
+        toast.error('Não foi possível conectar à API. Verifique a conexão e tente de novo.');
+        return;
+      }
       if (status === 503) {
-        toast.error(msg ?? 'Banco sem tabelas. Rode o seed no Postgres (ver README).');
+        toast.error(msg ?? 'Servidor da API indisponível. Tente novamente em instantes.');
         return;
       }
       if (status === 500) {
@@ -53,10 +65,18 @@ export function LoginPage() {
         return;
       }
       if (status === 404 || status === 502) {
-        toast.error('API indisponível. Use https://constock-teal.vercel.app');
+        toast.error('API indisponível. Recarregue a página ou tente de novo em alguns segundos.');
         return;
       }
-      toast.error(msg ?? 'Credenciais inválidas');
+      if (status === 429) {
+        toast.error(msg ?? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+        return;
+      }
+      if (status === 401) {
+        toast.error(msg ?? 'E-mail ou senha incorretos.');
+        return;
+      }
+      toast.error(msg ?? `Não foi possível entrar (${status}).`);
     },
   });
 
