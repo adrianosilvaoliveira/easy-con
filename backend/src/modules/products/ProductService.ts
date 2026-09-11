@@ -8,7 +8,6 @@ import { normalizeProductName } from '../../shared/utils/productName';
 import { generateInternalCode, normalizeInternalCode } from '../../shared/utils/internalCode';
 import { generateEan13Barcode } from '../../shared/utils/ean13';
 import { BatchService } from '../batches/BatchService';
-import { MovementService } from '../movements/MovementService';
 
 type CreateProductDTO = z.infer<typeof createProductSchema>;
 type UpdateProductDTO = z.infer<typeof updateProductSchema>;
@@ -348,6 +347,7 @@ export class ProductService {
     if (!existing) throw new NotFoundError('Produto não encontrado');
 
     if (existing.productType === 'KIT') {
+      const { MovementService } = await import('../movements/MovementService');
       await MovementService.releaseKitStockOnDelete(id, userId);
     }
 

@@ -43,7 +43,13 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<PrivateRoute />}>
-        <Route element={<MainLayout />}>
+        <Route
+          element={
+            <RouteErrorBoundary>
+              <MainLayout />
+            </RouteErrorBoundary>
+          }
+        >
           <Route
             element={
               <RouteErrorBoundary>

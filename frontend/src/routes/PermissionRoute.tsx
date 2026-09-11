@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
 interface PermissionRouteProps {
@@ -8,8 +8,16 @@ interface PermissionRouteProps {
 
 export function PermissionRoute({ permission }: PermissionRouteProps) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const location = useLocation();
 
   if (!hasPermission(permission)) {
+    if (location.pathname === '/' || location.pathname === '') {
+      return (
+        <div className="flex min-h-[40vh] items-center justify-center px-4 text-center text-sm text-slate-600 dark:text-slate-300">
+          Sem permissão para esta tela. Faça login novamente se o menu estiver vazio.
+        </div>
+      );
+    }
     return <Navigate to="/" replace />;
   }
 

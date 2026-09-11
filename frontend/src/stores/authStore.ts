@@ -28,7 +28,10 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (accessToken, refreshToken) =>
         set({ accessToken, refreshToken }),
 
-      setUser: (user) => set({ user }),
+      setUser: (user) => {
+        if (!user || typeof user !== 'object' || !user.id) return;
+        set({ user });
+      },
 
       logout: () =>
         set({
@@ -42,7 +45,7 @@ export const useAuthStore = create<AuthState>()(
         const { user } = get();
         if (!user) return false;
         if (user.role === 'ADMINISTRADOR') return true;
-        return user.permissions.includes(permission);
+        return user.permissions?.includes(permission) ?? false;
       },
     }),
     { name: 'hospital-stock-auth' }

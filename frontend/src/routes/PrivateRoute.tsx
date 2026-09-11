@@ -14,7 +14,10 @@ export function PrivateRoute() {
     if (!isAuthenticated || !accessToken) return;
     api
       .get<{ success: boolean; data: User }>('/auth/me')
-      .then((res) => setUser(res.data.data))
+      .then((res) => {
+        const profile = res.data?.data;
+        if (profile?.id) setUser(profile);
+      })
       .catch(() => {
         /* mantém sessão local se a sincronização falhar */
       });

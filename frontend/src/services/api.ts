@@ -25,7 +25,17 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const contentType = String(response.headers['content-type'] || '');
+    if (contentType.includes('text/html')) {
+      return Promise.reject(
+        Object.assign(new Error('API indisponível'), {
+          response: { status: 503, data: { message: 'Servidor da API não respondeu' } },
+        })
+      );
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
