@@ -1645,6 +1645,179 @@ export class MovementService {
     return { message: 'Movimentação excluída e estoque estornado' };
   }
 
+  /**
+   * Desmonta o estoque restante do kit e devolve os componentes
+   * aos lotes/locais originais, sem alterar custo unitário.
+   * Quantidade devolvida = o que ainda está “dentro” do kit.
+   */
+  static async releaseKitStockOnDelete(kitProductId: string, userId: string) {
+    const reversedBatchIds = new Set<string>();
+
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.stockMovement.deleteMany({
+          where: {
+            productId: kitProductId,
+            status: { in: ['PENDENTE', 'REJEITADA'] },
+          },
+        });
+
+        const kitStock = await tx.stockItem.findMany({
+          where: { productId: kitProductId, quantity: { gt: 0 } },
+        });
+        const remainingKitQty = kitStock.reduce((sum, item) => sum + item.quantity, 0);
+
+        const restoreComponent = async (
+          productId: string,
+          locationId: string,
+          batchId: string | null,
+          quantity: number,
+          assemblyId?: string
+        ) => {
+          if (quantity <= 0) return;
+          await this.updateStockInTx(tx, productId, locationId, batchId, quantity);
+          if (batchId) {
+            await BatchService.syncBatchQuantity(batchId, tx);
+            reversedBatchIds.add(batchId);
+          }
+          await tx.stockMovement.create({
+            data: {
+              type: 'AJUSTE_ENTRADA',
+              status: 'CONCLUIDA',
+              productId,
+              batchId,
+              quantity,
+              destinationLocationId: locationId,
+              reason: 'Exclusão de kit — retorno de componente',
+              notes: assemblyId
+                ? `kitProductId=${kitProductId} | kitAssemblyId=${assemblyId}`
+                : `kitProductId=${kitProductId}`,
+              movementDate: new Date(),
+              userId,
+              metadata: {
+                kind: 'KIT_DISASSEMBLY_COMPONENT',
+                kitProductId,
+                kitAssemblyId: assemblyId ?? null,
+              },
+            },
+          });
+        };
+
+        let unmatchedKitQty = remainingKitQty;
+
+        if (remainingKitQty > 0) {
+          const assemblies = await tx.stockMovement.findMany({
+            where: {
+              productId: kitProductId,
+              status: { in: ['CONCLUIDA', 'APROVADA'] },
+              metadata: { path: ['kind'], equals: 'KIT_ASSEMBLY' },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          for (const assembly of assemblies) {
+            if (unmatchedKitQty <= 0) break;
+            const take = Math.min(assembly.quantity, unmatchedKitQty);
+            if (take <= 0) continue;
+
+            const components = await tx.stockMovement.findMany({
+              where: {
+                AND: [
+                  { metadata: { path: ['kind'], equals: 'KIT_ASSEMBLY_COMPONENT' } },
+                  { metadata: { path: ['kitAssemblyId'], equals: assembly.id } },
+                ],
+              },
+            });
+
+            for (const component of components) {
+              if (!component.originLocationId) {
+                throw new ValidationError('Origem do componente da montagem não informada');
+              }
+              const qty =
+                take === assembly.quantity
+                  ? component.quantity
+                  : Math.round((component.quantity * take) / assembly.quantity);
+              await restoreComponent(
+                component.productId,
+                component.originLocationId,
+                component.batchId,
+                qty,
+                assembly.id
+              );
+            }
+            unmatchedKitQty -= take;
+          }
+        }
+
+        if (unmatchedKitQty > 0) {
+          const kitItems = await tx.productKitItem.findMany({
+            where: { kitProductId },
+          });
+          let leftover = unmatchedKitQty;
+          for (const stock of kitStock) {
+            if (leftover <= 0) break;
+            const take = Math.min(stock.quantity, leftover);
+            for (const item of kitItems) {
+              let locationId = stock.locationId;
+              let batchId = item.batchId;
+              if (item.batchId) {
+                const originBatch = await tx.productBatch.findUnique({
+                  where: { id: item.batchId },
+                  select: { id: true, stockLocationId: true },
+                });
+                if (originBatch) {
+                  locationId = originBatch.stockLocationId;
+                  batchId = originBatch.id;
+                }
+              }
+              await restoreComponent(
+                item.componentProductId,
+                locationId,
+                batchId,
+                item.quantity * take
+              );
+            }
+            leftover -= take;
+          }
+        }
+
+        for (const stock of kitStock) {
+          await this.updateStockInTx(
+            tx,
+            kitProductId,
+            stock.locationId,
+            stock.batchId,
+            -stock.quantity
+          );
+          if (stock.batchId) {
+            await BatchService.syncBatchQuantity(stock.batchId, tx);
+            reversedBatchIds.add(stock.batchId);
+          }
+          await tx.stockMovement.create({
+            data: {
+              type: 'SAIDA_CONSUMO',
+              status: 'CONCLUIDA',
+              productId: kitProductId,
+              batchId: stock.batchId,
+              quantity: stock.quantity,
+              originLocationId: stock.locationId,
+              reason: 'Exclusão de kit',
+              notes: 'Desmontagem automática — produtos devolvidos aos lotes originais',
+              movementDate: new Date(),
+              userId,
+              metadata: { kind: 'KIT_DISASSEMBLY', kitProductId },
+            },
+          });
+        }
+      },
+      { timeout: 30_000 }
+    );
+
+    for (const batchId of reversedBatchIds) {
+      await BatchService.syncBatchAlerts(batchId);
+    }
+  }
+
   static getEntryTypes() {
     return ENTRY_TYPES;
   }

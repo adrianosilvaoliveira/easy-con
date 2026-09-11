@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/services/api';
 import { Modal } from '@/components/ui/Modal';
@@ -72,6 +72,7 @@ export function ProductFormModal({
   const queryClient = useQueryClient();
   const canCreateCategory = useAuthStore((s) => s.hasPermission('products:CREATE'));
   const canCreateSupplier = useAuthStore((s) => s.hasPermission('products:CREATE'));
+  const canDeleteProduct = useAuthStore((s) => s.hasPermission('products:DELETE'));
   const [active, setActive] = useState(true);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -196,6 +197,9 @@ export function ProductFormModal({
     queryClient.invalidateQueries({ queryKey: ['stock-items'] });
     queryClient.invalidateQueries({ queryKey: queryKeys.stockLocations });
     queryClient.invalidateQueries({ queryKey: ['batches'] });
+    queryClient.invalidateQueries({ queryKey: ['product-batches'] });
+    queryClient.invalidateQueries({ queryKey: ['kits'] });
+    queryClient.invalidateQueries({ queryKey: ['movements'] });
     if (productId) {
       queryClient.invalidateQueries({ queryKey: ['product', productId] });
     }
@@ -227,6 +231,29 @@ export function ProductFormModal({
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao atualizar')),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/products/${productId}`),
+    onSuccess: (res) => {
+      toast.success(
+        (res.data?.data?.message as string) ||
+          'Kit excluído — produtos devolvidos ao estoque'
+      );
+      invalidateProductQueries();
+      onSuccess?.(res.data.data);
+      onClose();
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Erro ao excluir kit')),
+  });
+
+  const handleDeleteKit = () => {
+    if (!productId || !isKit) return;
+    const confirmed = window.confirm(
+      'Excluir este kit?\n\nOs produtos que estavam nele voltam ao estoque com as mesmas quantidades e valores. Nada é perdido nem recalculado.\n\nEsta ação não pode ser desfeita.'
+    );
+    if (!confirmed) return;
+    deleteMutation.mutate();
+  };
 
   const validateKitDraft = (): boolean => {
     const filled = kitItems.filter((i) => i.componentProductId);
@@ -304,7 +331,8 @@ export function ProductFormModal({
     }
   };
 
-  const pending = createMutation.isPending || updateMutation.isPending;
+  const pending =
+    createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const modalTitle = showTypeSelect
     ? 'Novo cadastro'
@@ -325,7 +353,19 @@ export function ProductFormModal({
         size="xl"
         footer={
           showForm ? (
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {isEdit && isKit && canDeleteProduct && (
+                <Button
+                  variant="danger"
+                  type="button"
+                  className="mr-auto"
+                  onClick={handleDeleteKit}
+                  loading={deleteMutation.isPending}
+                  disabled={pending}
+                >
+                  <Trash2 className="h-4 w-4" /> Excluir kit
+                </Button>
+              )}
               {!isEdit && (
                 <Button
                   variant="secondary"
@@ -339,10 +379,15 @@ export function ProductFormModal({
                   Voltar
                 </Button>
               )}
-              <Button variant="secondary" type="button" onClick={onClose}>
+              <Button variant="secondary" type="button" onClick={onClose} disabled={pending}>
                 Cancelar
               </Button>
-              <Button type="submit" form="product-form" loading={pending}>
+              <Button
+                type="submit"
+                form="product-form"
+                loading={createMutation.isPending || updateMutation.isPending}
+                disabled={pending}
+              >
                 {isEdit ? 'Salvar alterações' : isKit ? 'Salvar kit' : 'Salvar produto'}
               </Button>
             </div>
@@ -503,6 +548,8 @@ export function ProductFormModal({
                 <KitItemsEditor items={kitItems} onChange={setKitItems} errors={kitItemsError} />
                 <p className="sm:col-span-2 text-xs text-slate-500">
                   O cadastro define a receita. Para gerar estoque do kit, use Estoque → Montar kit.
+                  Excluir o kit devolve os produtos ao estoque original, com as mesmas quantidades e
+                  valores.
                 </p>
               </>
             )}

@@ -25,7 +25,7 @@ export class ProductController {
   }
 
   static async delete(req: Request, res: Response): Promise<void> {
-    const result = await ProductService.delete(getParam(req, 'id'));
+    const result = await ProductService.delete(getParam(req, 'id'), req.user!.id);
     res.json({ success: true, data: result });
   }
 

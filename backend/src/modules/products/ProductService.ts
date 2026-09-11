@@ -8,6 +8,7 @@ import { normalizeProductName } from '../../shared/utils/productName';
 import { generateInternalCode, normalizeInternalCode } from '../../shared/utils/internalCode';
 import { generateEan13Barcode } from '../../shared/utils/ean13';
 import { BatchService } from '../batches/BatchService';
+import { MovementService } from '../movements/MovementService';
 
 type CreateProductDTO = z.infer<typeof createProductSchema>;
 type UpdateProductDTO = z.infer<typeof updateProductSchema>;
@@ -339,9 +340,24 @@ export class ProductService {
     return this.findById(id);
   }
 
-  static async delete(id: string) {
+  static async delete(id: string, userId: string) {
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, productType: true },
+    });
+    if (!existing) throw new NotFoundError('Produto não encontrado');
+
+    if (existing.productType === 'KIT') {
+      await MovementService.releaseKitStockOnDelete(id, userId);
+    }
+
     await prisma.product.update({ where: { id }, data: { active: false } });
-    return { message: 'Produto desativado' };
+    return {
+      message:
+        existing.productType === 'KIT'
+          ? 'Kit excluído — produtos devolvidos ao estoque'
+          : 'Produto desativado',
+    };
   }
 
   static async createBatch(data: CreateBatchDTO, userId: string) {
